@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { parseJson } from "./parser/jsonParser";
 import { parseText } from "./parser/textParser";
-// Placeholder functions for CSV and Excel until implemented
 import { parseCsv } from "./parser/csvParser";
 import { parseExcel } from "./parser/excelParser";
 import { parseDate } from "./parser/dateParser";
@@ -12,7 +11,6 @@ interface ParsedData {
   rows: Record<string, any>[];
 }
 
-// Detect file type based on extension
 function detectFileType(file: File): ParsedData["fileType"] {
   const ext = file.name.split(".").pop()?.toLowerCase();
 
@@ -35,7 +33,6 @@ export function FileUploader() {
     try {
       let rows: Record<string, any>[] = [];
 
-      // Decide which parser to use
       if (fileType === "csv") {
         rows = await parseCsv(file);
         rows = parseDate(rows);
@@ -53,7 +50,6 @@ export function FileUploader() {
         return;
       }
 
-      // Save parsed data to state
       setData({
         filename: file.name,
         fileType,
@@ -67,15 +63,14 @@ export function FileUploader() {
   return (
     <div>
       <title>Data Normalization</title>
-      <p>Only accept .txt .xlsx .json .csv files</p>
+      <p>Only .txt .xlsx .json . csv files</p>
 
       <input
         type="file"
-        accept=".json,.txt,.xlsx ,.csv"
+        accept=".json,.txt,.xlsx,.csv"
         onChange={handleFileChange}
       />
 
-      {/* Render table only when data exists and has rows */}
       {data && data.rows.length > 0 && (
         <div>
           <p>Preview: {data.filename}</p>

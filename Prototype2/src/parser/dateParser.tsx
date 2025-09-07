@@ -1,15 +1,14 @@
 import { parse, format, isValid } from "date-fns";
 
 export function parseDate(rows: Record<string, any>[]): Record<string, any>[] {
-  // Only handle a couple of formats for now
   const patterns = [
-    "yyyy-MM-dd", // 2025-09-06
-    "dd/MM/yyyy", // 06/09/2025
-    "MM-dd-yyyy", // 09-06-2025
-    "M/d/yyyy", // 8/31/2025
-    "MM/dd/yyyy", // 08/31/2025
-    "M/d/yy", // 8/31/25
-    "MM/dd/yy", // 08/31/25
+    "yyyy-MM-dd",
+    "dd/MM/yyyy",
+    "MM-dd-yyyy",
+    "M/d/yyy",
+    "MM/dd/yyyy",
+    "M/d/yy",
+    "MM/dd/yy",
   ];
 
   return rows.map((row) => {
@@ -20,11 +19,10 @@ export function parseDate(rows: Record<string, any>[]): Record<string, any>[] {
       if (typeof value === "string" && looksLikeDate(value)) {
         const normalized = tryPatterns(value, patterns);
         if (normalized) {
-          newRow[key] = normalized; // normalized to YYYY-MM-DD
+          newRow[key] = normalized;
         }
       }
     });
-
     return newRow;
   });
 }
@@ -34,7 +32,7 @@ function tryPatterns(value: string, patterns: string[]): string | null {
     const d = parse(value, p, new Date());
     if (isValid(d)) {
       let year = d.getFullYear();
-      if (year < 1000) year += 2000; // Fix Excel-style "25" → "2025"
+      if (year < 1000) year += 2000; // Fix Excel-style "25" => "2025"
       return format(new Date(year, d.getMonth(), d.getDate()), "yyyy-MM-dd");
     }
   }
