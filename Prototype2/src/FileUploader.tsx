@@ -125,7 +125,7 @@ export function FileUploader() {
             Choose File
           </label>
         </div>
-        <p className="file-note">Only .txt .xlsx .json .csv files</p>
+        <p className="file-note">Only .xlsx .csv .txt .json files</p>
 
         {data && (
           <>
