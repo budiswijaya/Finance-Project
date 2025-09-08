@@ -1,42 +1,73 @@
 #root {
-  max-width: 1280px;
   margin: 0 auto;
   padding: 2rem;
+  text-align: center; /* align content to left instead */
+  color: #ddd;
+}
+
+h3 {
+  font-size: 1rem;
+  margin-bottom: 0.5rem;
   text-align: center;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
+p,
+label,
+select,
+button {
+  font-size: 0.85rem; /* smaller and less intrusive */
 }
 
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+/* Hide the ugly default */
+.file-input-wrapper input[type="file"] {
+  display: none;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
+.file-upload-label {
+  padding: 0.5rem 1rem;
+  background: #333;
+  color: #fff;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: background 0.2s;
 }
 
-.card {
-  padding: 2em;
+.file-upload-label:hover {
+  background: #444;
 }
 
-.read-the-docs {
-  color: #888;
+.file-input-wrapper {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 0.5rem;
+}
+
+.file-note {
+  font-size: 0.8rem;
+  color: #aaa;
+  text-align: center;
+}
+
+.table-container {
+  display: flex;
+  gap: 2rem;
+  justify-content: center;
+  align-items: flex-start;
+  margin-top: 2rem;
+}
+
+table {
+  font-size: 0.9rem;
+  border-collapse: collapse;
+}
+
+th {
+  background: #333;
+  font-weight: bold;
+  font-size: 0.9rem;
+}
+
+td {
+  background: #222;
 }
