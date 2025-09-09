@@ -19,3 +19,4 @@ A foundation for future dashboards, persistence, and backend integration.
 This project is part of my portfolio because it reflects the core of my learning journey—not just “coding for the sake of coding,” but understanding how data flows, how to structure normalization logic, and how to prepare for scalable features such as dashboards, Excel integration, and database persistence.
 
 <img src= https://github.com/budiswijaya/Finance-Project/blob/main/Snipaste_2025-09-08_19-24-31.png>
+<img src= https://github.com/budiswijaya/Finance-Project/blob/main/Snipaste_2025-09-09_23-03-25.png>
