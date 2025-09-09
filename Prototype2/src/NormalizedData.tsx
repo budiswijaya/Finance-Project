@@ -21,7 +21,7 @@ function detectFileType(file: File): ParsedData["fileType"] {
   return "unknown";
 }
 
-export function FileUploader() {
+export function NormalizedData() {
   const [data, setData] = useState<ParsedData | null>(null);
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [normalizedRows, setNormalizedRows] = useState<any[]>([]);
@@ -47,7 +47,6 @@ export function FileUploader() {
         console.error("Unsupported file type:", file.name);
         return;
       }
-
       rows = parseDate(rows);
 
       setData({
@@ -74,7 +73,6 @@ export function FileUploader() {
       }
       tempRows.push(newRow);
     }
-
     setNormalizedRows(tempRows);
   }
 
@@ -87,7 +85,7 @@ export function FileUploader() {
         marginTop: "2rem",
       }}
     >
-      {/* Left side = Original Data (only if data exists) */}
+      {/* Original Data */}
       {data && (
         <div style={{ flex: 1 }}>
           <h3>Original Data</h3>
@@ -112,12 +110,12 @@ export function FileUploader() {
         </div>
       )}
 
-      {/* Middle = Input + Mapping UI (always visible) */}
+      {/* Middle Control Panel */}
       <div style={{ flex: 0.7 }}>
         <div className="file-input-wrapper">
           <input
-            id="file-upload"
             type="file"
+            id="file-upload"
             accept=".json,.txt,.xlsx,.csv"
             onChange={handleFileChange}
           />
@@ -147,14 +145,17 @@ export function FileUploader() {
               </div>
             ))}
 
-            <button onClick={handleNormalize} style={{ marginTop: "1rem" }}>
-              Normalize Data
+            <button onClick={handleNormalize} style={{ marginTop: "0.5rem" }}>
+              Add Whole Data
             </button>
+            <button style={{ marginTop: "0.25rem" }}>Add Selected Data</button>
+            <button style={{ margin: "0.25rem" }}>Download</button>
+            <button style={{ margin: "0.25rem" }}>Submit</button>
           </>
         )}
       </div>
 
-      {/* Right side = Normalized Data (only if data exists) */}
+      {/* Normalized Data */}
       {data && (
         <div style={{ flex: 1 }}>
           <h3>Normalized Data</h3>
