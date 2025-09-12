@@ -21,6 +21,10 @@ This project is part of my portfolio because it reflects the core of my learning
 <img src= https://github.com/budiswijaya/Finance-Project/blob/main/Data-Normalization/00.png>
 <img src= https://github.com/budiswijaya/Finance-Project/blob/main/Data-Normalization/0.png>
 <img src= https://github.com/budiswijaya/Finance-Project/blob/main/Data-Normalization/1.png>
+
+There will be upcoming dashboard web.
+This below will be the upcoming overall personal/company dashboard with import Master_Template feature that have data whole stored in the dashboard
+
 <img src= https://github.com/budiswijaya/Finance-Project/blob/main/Data-Normalization/2.png>
 <img src= https://github.com/budiswijaya/Finance-Project/blob/main/Data-Normalization/3.png>
 <img src= https://github.com/budiswijaya/Finance-Project/blob/main/Data-Normalization/4.png>
