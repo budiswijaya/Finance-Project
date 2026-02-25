@@ -1,4 +1,0 @@
-date,description,amount
-2025-08-31,Indomaret,45000
-2025-08-30,Grab,25000
-2025-08-29,Starbucks,65000
