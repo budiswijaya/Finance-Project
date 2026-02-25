@@ -1,4 +1,3 @@
-// NormalizedData.tsx
 import React, {
   useState,
   useEffect,
@@ -9,11 +8,6 @@ import React, {
 import { ReactGrid } from "@silevis/reactgrid";
 import type { Column, Row, CellChange } from "@silevis/reactgrid";
 import "@silevis/reactgrid/styles.css";
-import { parseJson } from "./parser/jsonParser";
-import { parseText } from "./parser/textParser";
-import { parseCsv } from "./parser/csvParser";
-import { parseExcel } from "./parser/excelParser";
-import { parseDate } from "./parser/dateParser";
 
 // ---------- Types ----------
 interface ParsedData {
@@ -46,21 +40,6 @@ const COLUMN_WIDTHS = {
 } as const;
 
 // ---------- Utils ----------
-const detectFileType = (file: File): ParsedData["fileType"] => {
-  const ext = file.name.split(".").pop()?.toLowerCase();
-  switch (ext) {
-    case "csv":
-      return "csv";
-    case "xlsx":
-      return "excel";
-    case "json":
-      return "json";
-    case "txt":
-      return "text";
-    default:
-      return "unknown";
-  }
-};
 
 const getColumnWidth = (
   header: string,
@@ -182,7 +161,7 @@ export function NormalizedData() {
   // History management
   const { pushState, undo, redo, reset: resetHistory } = useHistory();
 
-  // Memoized values
+  // Memorized values
   const originalHeaders = useMemo(
     () => (data ? Object.keys(data.rows[0] || {}) : []),
     [data]
@@ -307,32 +286,24 @@ export function NormalizedData() {
       const file = e.target.files?.[0];
       if (!file) return;
 
-      const fileType = detectFileType(file);
+      const formData = new FormData();
+      formData.append("file", file);
 
       try {
-        let rows: Record<string, any>[] = [];
+        const response = await fetch("http://localhost:8001/parse", {
+          method: "POST",
+          body: formData,
+        });
 
-        switch (fileType) {
-          case "csv":
-            rows = await parseCsv(file);
-            break;
-          case "excel":
-            rows = await parseExcel(file);
-            break;
-          case "json":
-            rows = await parseJson(file);
-            break;
-          case "text":
-            rows = await parseText(file);
-            break;
-          default:
-            return;
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
 
-        rows = parseDate(rows);
-        setData({ filename: file.name, fileType, rows });
+        const result: ParsedData = await response.json();
 
-        const keys = Object.keys(rows[0] || {});
+        setData(result);
+
+        const keys = Object.keys(result.rows[0] || {});
         const columns: Column[] = [
           {
             columnId: "rowIndex",
@@ -341,12 +312,12 @@ export function NormalizedData() {
           },
           ...keys.map((header) => ({
             columnId: header,
-            width: getColumnWidth(header, rows),
+            width: getColumnWidth(header, result.rows),
             resizable: true,
           })),
         ];
 
-        const gridRows = buildGridRows(rows, [
+        const gridRows = buildGridRows(result.rows, [
           {
             columnId: "rowIndex",
             width: COLUMN_WIDTHS.rowIndex,
@@ -569,6 +540,7 @@ export function NormalizedData() {
     [normalizedGridRows, normalizedGridCols, rowsToObjects, pushState]
   );
 
+  // Note: column resize events require paid grid version
   const handleColumnsChanged = useCallback(
     (changes: { columnId: string; width: number }[]) => {
       setOriginalGridCols((prev) =>

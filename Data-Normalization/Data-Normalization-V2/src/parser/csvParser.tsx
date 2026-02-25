@@ -1,6 +1,6 @@
 import Papa from "papaparse";
 
-export async function parseCsv(file: FIle): Promise<Record<string, any>[]> {
+export async function parseCsv(file: File): Promise<Record<string, any>[]> {
   const text = await file.text();
 
   const result = Papa.parse<Record<String, any>>(text, {
