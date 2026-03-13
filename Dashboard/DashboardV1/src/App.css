@@ -1,0 +1,119 @@
+#root {
+  margin: 0 auto;
+  padding: 1rem;
+  text-align: center; /* align content to left instead */
+  color: #ddd;
+}
+
+h3 {
+  font-size: 1rem;
+  margin-bottom: 0.5rem;
+  text-align: center;
+}
+
+p,
+label,
+select,
+button {
+  font-size: 0.85rem; /* smaller and less intrusive */
+}
+
+/* Hide the ugly default */
+.file-input-wrapper input[type="file"] {
+  display: none;
+}
+
+.file-upload-label {
+  padding: 0.5rem 1rem;
+  background: #333;
+  color: #fff;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: background 0.2s;
+}
+
+.file-upload-label:hover {
+  background: #444;
+}
+
+.file-input-wrapper {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 0.5rem;
+}
+
+.file-note {
+  font-size: 0.8rem;
+  color: #aaa;
+  text-align: center;
+}
+
+.table-container {
+  display: flex;
+  gap: 2rem;
+  justify-content: center;
+  align-items: flex-start;
+  margin-top: 2rem;
+}
+
+table {
+  font-size: 0.9rem;
+  border-collapse: collapse;
+}
+
+th {
+  background: #333;
+  font-weight: bold;
+  font-size: 0.9rem;
+}
+
+td {
+  background: #222;
+}
+/* ReactGrid wrapper with card look */
+.grid-wrapper {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 0.5rem;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+  overflow: auto;
+  max-height: 400px; /* control vertical size */
+  max-width: 600px; /* prevent huge width */
+}
+
+/* ReactGrid rows and headers */
+.reactgrid-content {
+  font-size: 0.85rem;
+  color: #333;
+}
+
+/* Header cells */
+.reactgrid-content .rg-cell.rg-header-cell {
+  background: #f7f7f7;
+  font-weight: bold;
+  color: #222;
+  border-bottom: 1px solid #ddd;
+}
+
+/* Normal cells */
+.reactgrid-content .rg-cell {
+  background: #fff;
+  border: 1px solid #eee;
+}
+
+.reactgrid .rg-cell-text {
+  color: black !important;
+}
+
+/* Zebra striping */
+.reactgrid-content .rg-row:nth-child(odd) .rg-cell {
+  background: #fafafa;
+}
+
+/* Selected cell highlight */
+.reactgrid-content .rg-cell.rg-selected {
+  outline: 2px solid #1976d2 !important;
+  background: #e3f2fd !important;
+}
