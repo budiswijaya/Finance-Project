@@ -31,11 +31,11 @@ interface SavedState {
 }
 
 // ---------- Constants ----------
-const TARGET_COLUMNS = ["Date", "Description", "Amount"] as const;
+const TARGET_COLUMNS = ["Date", "Note", "Amount"] as const;
 const MAX_HISTORY_SIZE = 100;
 const COLUMN_WIDTHS = {
   rowIndex: 40,
-  Description: 260,
+  Note: 260,
   default: 140,
 } as const;
 
@@ -63,8 +63,24 @@ const safeText = (newCell: any): string =>
 const formatCurrencyNumber = (num: number): string =>
   new Intl.NumberFormat("id-ID").format(num);
 
-const parseAmount = (text: string): number =>
-  Number(String(text).replace(/[^0-9.\-]/g, "")) || 0;
+const parseAmount = (text: string): number => {
+  if (!text || typeof text !== 'string') return 0;
+
+  const str = text.trim();
+
+  // Handle parentheses for negative amounts (200.00) -> -200.00
+  if (str.startsWith('(') && str.endsWith(')')) {
+    const inner = str.slice(1, -1);
+    const num = Number(inner.replace(/[^0-9.\-]/g, ""));
+    return num ? -Math.abs(num) : 0;
+  }
+
+  // Handle regular negative amounts and currency symbols
+  const cleaned = str.replace(/[^0-9.\-\s]/g, "").trim();
+  const num = Number(cleaned) || 0;
+
+  return num;
+};
 
 // ---------- Custom Hooks ----------
 const useHistory = () => {
@@ -148,11 +164,12 @@ export function NormalizedData() {
   const [normalizedGridRows, setNormalizedGridRows] = useState<Row[]>([]);
   const [originalFocus, setOriginalFocus] = useState<any>(null);
   const [normalizedFocus, setNormalizedFocus] = useState<any>(null);
+  const [isCalculated, setIsCalculated] = useState<boolean>(false);
 
-  // Debug focus state
+  // Reset calculation state when normalized data changes
   useEffect(() => {
-    console.log("Original Focus:", originalFocus);
-  }, [originalFocus]);
+    setIsCalculated(false);
+  }, [normalizedRows]);
 
   useEffect(() => {
     console.log("Normalized Focus:", normalizedFocus);
@@ -290,7 +307,7 @@ export function NormalizedData() {
       formData.append("file", file);
 
       try {
-        const response = await fetch("http://localhost:8001/parse", {
+        const response = await fetch("http://localhost:8003/parse", {
           method: "POST",
           body: formData,
         });
@@ -557,11 +574,11 @@ export function NormalizedData() {
   const handleDownload = useCallback(() => {
     if (!normalizedRows.length) return;
 
-    const headers = ["Date", "Description", "Amount"];
+    const headers = ["Date", "Note", "Amount"];
     const csvContent = [
       headers.join(","),
       ...normalizedRows.map(
-        (r) => `${r.date ?? ""},${r.description ?? ""},${r.amount ?? 0}`
+        (r) => `${r.date ?? ""},${r.note ?? ""},${r.amount ?? 0}`
       ),
     ].join("\n");
 
@@ -574,15 +591,89 @@ export function NormalizedData() {
     URL.revokeObjectURL(url);
   }, [normalizedRows]);
 
-  const handleSubmit = useCallback(() => {
-    const { count, sum } = normalizedSummary;
-    setSubmitMessage(
-      `Adding ${count} items with sum amount ${formatCurrencyNumber(
-        sum
-      )}, please confirm.`
+  const handleCalculate = useCallback(() => {
+    // Validate data
+    const invalidRows = normalizedRows.filter(row =>
+      !row.date || row.amount === undefined || row.amount === null || isNaN(row.amount)
     );
-    console.log("Submitting normalized rows:", normalizedRows);
+
+    if (invalidRows.length > 0) {
+      setSubmitMessage(`Validation failed: ${invalidRows.length} rows have missing or invalid date/amount fields.`);
+      setIsCalculated(false);
+      return;
+    }
+
+    if (normalizedRows.length === 0) {
+      setSubmitMessage("No data to calculate. Please normalize some data first.");
+      setIsCalculated(false);
+      return;
+    }
+
+    const { count, sum } = normalizedSummary;
+    setSubmitMessage(`Calculated: ${count} transactions with total amount ${formatCurrencyNumber(sum)}. Ready to submit.`);
+    setIsCalculated(true);
   }, [normalizedSummary, normalizedRows]);
+
+  const handleSubmit = useCallback(async () => {
+    if (!isCalculated) {
+      setSubmitMessage("Please calculate first to validate your data before submitting.");
+      return;
+    }
+    try {
+      // Validate data before submission
+      const invalidRows = normalizedRows.filter(row =>
+        !row.date || row.amount === undefined || row.amount === null || isNaN(row.amount)
+      );
+
+      if (invalidRows.length > 0) {
+        setSubmitMessage(`Validation failed: ${invalidRows.length} rows have missing or invalid date/amount fields.`);
+        return;
+      }
+
+      // Check category types exist
+      const response = await fetch("http://localhost:8003/categories/types");
+      if (!response.ok) {
+        throw new Error("Failed to check category types");
+      }
+
+      const { types } = await response.json();
+      const hasIncome = types.includes('income');
+      const hasExpense = types.includes('expense');
+
+      if (!hasIncome || !hasExpense) {
+        const missing = [];
+        if (!hasIncome) missing.push('income');
+        if (!hasExpense) missing.push('expense');
+        setSubmitMessage(`You should define category type that does not exist in database first to submit data. Missing: ${missing.join(', ')}`);
+        return;
+      }
+
+      // Submit the data
+      const submitResponse = await fetch("http://localhost:8003/transactions/import", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(normalizedRows)
+      });
+
+      if (!submitResponse.ok) {
+        const errorData = await submitResponse.json();
+        throw new Error(errorData.detail || "Failed to submit transactions");
+      }
+
+      const result = await submitResponse.json();
+      const { count, sum } = normalizedSummary;
+      setSubmitMessage(
+        `Successfully added ${result.inserted} transactions with sum amount ${formatCurrencyNumber(sum)}.`
+      );
+      setIsCalculated(false); // Reset calculation state after successful submission
+      console.log("Submitted normalized rows:", normalizedRows);
+    } catch (error) {
+      console.error("Submit error:", error);
+      setSubmitMessage(`Error: ${error.message}`);
+    }
+  }, [normalizedSummary, normalizedRows, isCalculated]);
 
   // Save/Load functionality
   const handleSave = useCallback(() => {
@@ -1156,7 +1247,7 @@ export function NormalizedData() {
                 >
                   <option value="">Select field</option>
                   <option value="Date">Date</option>
-                  <option value="Description">Description</option>
+                  <option value="Note">Note</option>
                   <option value="Amount">Amount</option>
                   <option value="Ignore">Ignore</option>
                 </select>
@@ -1178,7 +1269,10 @@ export function NormalizedData() {
               >
                 Download
               </button>
-              <button onClick={handleSubmit} disabled={!normalizedRows.length}>
+              <button onClick={handleCalculate} disabled={!normalizedRows.length}>
+                Calculate
+              </button>
+              <button onClick={handleSubmit} disabled={!normalizedRows.length || !isCalculated}>
                 Submit
               </button>
             </div>
