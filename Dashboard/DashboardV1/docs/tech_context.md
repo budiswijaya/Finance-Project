@@ -24,7 +24,7 @@
 | Server | Uvicorn 0.24 |
 | Language | Python (version not pinned in requirements) |
 | DB driver | `psycopg2` (PostgreSQL) |
-| File parsing | `pandas` 2.1.4 + `openpyxl` 3.1.2 |
+| File parsing | `pandas` 2.1.4 + `openpyxl>=3.1.5` |
 | Config | `python-dotenv` — reads `.env` for `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` |
 | Port | 8003 |
 
@@ -36,14 +36,18 @@
 
 - PostgreSQL
 - Schema defined in `backend/database_setup.sql`
-- Two tables: `categories`, `transactions`
+- Three tables: `categories`, `transactions`, `category_keywords`
 - Sample categories seeded in SQL script
+- Sample keyword rules are seeded with dynamic category name lookup (no hard-coded IDs)
+- Keyword rules are queried and used during transaction import for classification (Phase 1)
+- Classification logic is isolated in `backend/category_classifier.py` and called by `backend/main.py`
 
 ## Development Setup
 
 1. Start backend: `python backend/main.py` (or `run_backend.bat`)
 2. Start frontend: `npm run dev` (Vite on port 5173)
 3. Frontend calls backend at `http://localhost:8003`
+4. Local env template: `backend/.env.example` (copy to `backend/.env` for local use)
 
 ## Known Constraints
 

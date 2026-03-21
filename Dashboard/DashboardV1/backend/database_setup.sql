@@ -36,3 +36,52 @@ INSERT INTO categories (name, type) VALUES
 ('Utilities', 'expense'),
 ('Healthcare', 'expense')
 ON CONFLICT (name) DO NOTHING;
+
+-- Categories keywords rules
+CREATE TABLE IF NOT EXISTS category_keywords (
+    id SERIAL PRIMARY KEY,
+    category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+    keyword VARCHAR(100) NOT NULL,
+    priority INTEGER DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Add unique constraint to prevent duplicate keyword/category pairs
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'category_keyword_unique'
+    ) THEN
+        ALTER TABLE category_keywords
+            ADD CONSTRAINT category_keyword_unique UNIQUE(category_id, keyword);
+    END IF;
+END $$;
+
+-- Insert sample keywords using dynamic category lookup (stable, name-based)
+-- This approach is safer than hard-coded category IDs: if categories are reordered or new ones added,
+-- keywords will still point to the correct categories by name
+INSERT INTO category_keywords (category_id, keyword, priority)
+SELECT c.id, 'restaurant', 1 FROM categories c WHERE c.name = 'Food & Dining' AND c.type = 'expense'
+UNION ALL
+SELECT c.id, 'coffee', 1 FROM categories c WHERE c.name = 'Food & Dining' AND c.type = 'expense'
+UNION ALL
+SELECT c.id, 'cafe', 1 FROM categories c WHERE c.name = 'Food & Dining' AND c.type = 'expense'
+UNION ALL
+SELECT c.id, 'indomaret', 2 FROM categories c WHERE c.name = 'Food & Dining' AND c.type = 'expense'
+UNION ALL
+SELECT c.id, 'alfamart', 2 FROM categories c WHERE c.name = 'Food & Dining' AND c.type = 'expense'
+UNION ALL
+SELECT c.id, 'grab', 2 FROM categories c WHERE c.name = 'Transportation' AND c.type = 'expense'
+UNION ALL
+SELECT c.id, 'uber', 2 FROM categories c WHERE c.name = 'Transportation' AND c.type = 'expense'
+UNION ALL
+SELECT c.id, 'taxi', 1 FROM categories c WHERE c.name = 'Transportation' AND c.type = 'expense'
+UNION ALL
+SELECT c.id, 'fuel', 1 FROM categories c WHERE c.name = 'Transportation' AND c.type = 'expense'
+UNION ALL
+SELECT c.id, 'bus', 1 FROM categories c WHERE c.name = 'Transportation' AND c.type = 'expense'
+UNION ALL
+SELECT c.id, 'bpjs', 1 FROM categories c WHERE c.name = 'Healthcare' AND c.type = 'expense'
+ON CONFLICT (category_id, keyword) DO NOTHING;

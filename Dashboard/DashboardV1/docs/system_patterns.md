@@ -55,12 +55,29 @@ File Upload
 
 ### Category Auto-Assignment
 - `/transactions/import` refuses submissions unless both `income` and `expense` category types exist in DB
-- `determine_category_id()` does keyword matching: checks if any category name appears as a substring of the transaction note
-- If no match found, raises HTTP 400 asking user to include a category keyword in the note
+- `determine_category_id()` uses a three-phase strategy:
+  1. **Keyword matching (primary)**: Loads all `category_keywords` rules filtered by transaction type; matches keywords in transaction note with deterministic priority ordering (lower priority number wins; category ID breaks ties)
+  2. **Category name matching (fallback)**: Falls back to substring matching of category names for backward compatibility
+  3. **Error with guidance (final)**: Lists all available keywords and category names user can use
+- If no match found, raises HTTP 400 asking user to include a keyword or category name in the note
+- Transaction type (income/expense) is inferred from amount sign; only keywords for that type are considered
+
+### Keyword Matching Strategy
+- **Data loading**: At request time, keywords are loaded once per import with a LEFT JOIN between categories and category_keywords
+- **Deterministic tie-breaking**: If note contains multiple keywords:
+  - Primary: Keyword with lower priority number wins (priority 1 > priority 2)
+  - Secondary: If same priority across categories, lower category ID wins
+  - Example: note="cafe grab lunch" with {cafe→Food p:1, grab→Transport p:2} → Food & Dining (priority 1 wins)
+- **Matching rules**: Substring matching (`keyword in note_lower`); no word boundaries yet (Phase 2 enhancement)
+- **Seed data**: Uses dynamic category lookup by name instead of hard-coded IDs (stable across schema changes)
+- **Uniqueness**: `UNIQUE(category_id, keyword)` constraint prevents duplicate keyword/category pairs
 
 ### Database
-- Two tables: `categories (id, name, icon, type, created_at)` and `transactions (id, date, amount, note, category_id, created_at)`
+- Three tables: `categories (id, name, icon, type, created_at)`, `transactions (id, date, amount, note, category_id, created_at)`, and `category_keywords (id, category_id, keyword, priority, created_at)`
 - `category_id` is a required FK — every transaction must have a category
+- `category_keywords.category_id` cascades on delete, so keyword rules are treated as dependent metadata for a category
+- `category_keywords` is queried at runtime during transaction import with LEFT JOIN to support categories with no keywords
+- `category_keywords` has UNIQUE constraint on `(category_id, keyword)` to prevent duplicate rules
 - Global `psycopg2` connection (not pooled, not per-request)
 
 ## Save / Load

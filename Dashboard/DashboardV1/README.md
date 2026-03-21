@@ -16,8 +16,8 @@
    - Or run the setup script: `cd backend && setup_database.bat`
 
 3. **Environment Setup**:
-   - Copy the example environment file: `cp .env.example .env`
-   - Update `.env` with your database credentials:
+   - Copy the example environment file: `cd backend && cp .env.example .env`
+   - Update `backend/.env` with your database credentials:
      ```
      DB_HOST=localhost
      DB_NAME=finance_dashboard

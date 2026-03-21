@@ -2,30 +2,50 @@
 
 ## Current State
 
-No automated tests are present in this project. There is no test runner configured in `package.json` and no test files in `src/`.
+- Frontend: manual testing workflow, no frontend test runner configured in `package.json`.
+- Backend category-classification: automated unit tests are present.
 
-## Manual Testing Approach
+## Backend Automated Tests
 
-The current workflow relies on manual browser testing:
-1. Upload a file and verify the original grid renders correctly
-2. Map columns and click **Add Data** — verify rows append to normalized grid
-3. Edit cells in either grid and verify undo (Ctrl+Z) / redo (Ctrl+Y / Ctrl+Shift+Z) works
-4. Use Delete Row / Delete Column buttons after focusing a cell
-5. Click **Calculate** and verify summary message
-6. Click **Submit** and check backend response
-7. **Save** to localStorage and **Load** to verify persistence
+- Test file: `test_category_keywords.py`
+- Scope: imports production classifier (`backend/category_classifier.py`) and validates runtime behavior.
+- Current suite size: 5 unit tests.
 
-## Backend Endpoints (Manual)
+### Covered Behaviors
 
-- `GET http://localhost:8003/health` — verify server is running
-- `POST http://localhost:8003/parse` — test file parsing with multipart form
-- `GET http://localhost:8003/categories/types` — verify category types exist before import
-- `POST http://localhost:8003/transactions/import` — test bulk import
+1. Keyword priority resolution
+2. Deterministic tie-break by category ID
+3. Category-name fallback remains type-scoped
+4. Income-only keywords do not classify expense rows
+5. Error guidance is type-scoped
 
-## Key Things to Test When Modifying
+### Run Command
 
-- **Undo/redo**: Changes to grid state must push to `useHistory`
-- **Append logic**: Multiple file uploads should accumulate rows, not reset
-- **Category matching**: Transaction notes must contain category keywords for auto-assignment
-- **Amount parsing**: Parentheses `(200.00)` → `-200`, currency symbols stripped, negatives preserved
-- **Date normalization**: Various date formats all resolve to `YYYY-MM-DD`
+```bash
+cd /d/Github/Finance-Project/Dashboard/DashboardV1
+d:/Github/.venv/Scripts/python.exe test_category_keywords.py
+```
+
+## Manual Testing Workflow
+
+1. Upload a source file and verify original grid render.
+2. Map columns and append normalized data.
+3. Edit cells and verify undo/redo behavior.
+4. Run Calculate and verify validation summary.
+5. Submit to backend and verify inserted count response.
+6. Save/load normalized state from local storage.
+
+## Backend Endpoint Checks
+
+- `GET /health`
+- `POST /parse`
+- `GET /categories/types`
+- `POST /transactions/import`
+
+## Regression Focus Areas
+
+- Type-safe category assignment (`income` vs `expense`)
+- Keyword priority and deterministic tie-break behavior
+- Category-name fallback after keyword miss
+- Date normalization to `YYYY-MM-DD`
+- Amount parsing edge cases (currency symbols, negatives, parentheses)

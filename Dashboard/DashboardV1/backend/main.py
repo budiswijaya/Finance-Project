@@ -13,6 +13,7 @@ import psycopg2
 
 import os
 from dotenv import load_dotenv
+from category_classifier import determine_category_id
 
 # Load environment variables
 load_dotenv()
@@ -86,33 +87,46 @@ async def import_transactions(rows: List[Dict[str, Any]]):
                 ", ".join([t for t in ['income', 'expense'] if t not in existing_types])
             )
 
-        # Get all categories for automatic assignment
-        cursor.execute("SELECT id, name, type FROM categories ORDER BY name")
+        # Get all categories with their keyword rules for automatic assignment
+        # Uses LEFT JOIN to include categories even if they have no keywords
+        cursor.execute("""
+            SELECT c.id, c.name, c.type, 
+                   COALESCE(json_agg(json_build_object(
+                       'keyword', ck.keyword, 
+                       'priority', ck.priority
+                   ) ORDER BY ck.priority ASC, ck.id ASC), '[]') as keywords
+            FROM categories c
+            LEFT JOIN category_keywords ck ON c.id = ck.category_id
+            GROUP BY c.id, c.name, c.type
+            ORDER BY c.name
+        """)
         categories = cursor.fetchall()
 
-        # Create lookup dictionaries
-        income_categories = {row[0]: row[1] for row in categories if row[2] == 'income'}
-        expense_categories = {row[0]: row[1] for row in categories if row[2] == 'expense'}
-        category_names = {row[1].lower(): row[0] for row in categories}
+        # Build per-type lookup dictionaries to preserve income/expense correctness.
+        keywords_by_type = {'income': {}, 'expense': {}}
+        category_names_by_type = {'income': {}, 'expense': {}}
+        available_category_names_by_type = {'income': [], 'expense': []}
 
-        def determine_category_id(amount: float, note: str) -> int:
-            """Automatically determine category_id based on amount and note"""
-            note_lower = note.lower()
+        for cat_id, cat_name, cat_type, keywords_json in categories:
+            if cat_type not in keywords_by_type:
+                continue
 
-            # Try to match category names in the note
-            for cat_name, cat_id in category_names.items():
-                if cat_name in note_lower:
-                    return cat_id
+            normalized_name = cat_name.lower().strip()
+            category_names_by_type[cat_type][normalized_name] = cat_id
+            available_category_names_by_type[cat_type].append(cat_name)
 
-            # If no keyword match found, raise an error asking user to be more specific
-            transaction_type = "income" if amount > 0 else "expense"
-            available_cats = list(income_categories.values()) if amount > 0 else list(expense_categories.values())
-            raise HTTPException(
-                status_code=400,
-                detail=f"Cannot automatically determine category for transaction: '{note}' (amount: {amount}). " +
-                f"Please include one of these {transaction_type} category names in your transaction note: {', '.join(available_cats)}. " +
-                f"Available categories: {', '.join([f'{name} (ID: {id})' for id, name in (income_categories.items() if amount > 0 else expense_categories.items())])}"
-            )
+            if not keywords_json:
+                continue
+
+            cleaned_keywords = []
+            for kw in keywords_json:
+                keyword = kw.get('keyword') if isinstance(kw, dict) else None
+                priority = kw.get('priority') if isinstance(kw, dict) else None
+                if isinstance(keyword, str) and keyword.strip():
+                    cleaned_keywords.append((keyword.lower().strip(), priority if isinstance(priority, int) else 1))
+
+            if cleaned_keywords:
+                keywords_by_type[cat_type][cat_id] = cleaned_keywords
 
         inserted_count = 0
         for r in rows:
@@ -126,7 +140,13 @@ async def import_transactions(rows: List[Dict[str, Any]]):
             note = r.get("note") or r.get("description") or ""
 
             # Automatically determine category_id
-            category_id = determine_category_id(r["amount"], note)
+            category_id = determine_category_id(
+                amount=r["amount"],
+                note=note,
+                keywords_by_type=keywords_by_type,
+                category_names_by_type=category_names_by_type,
+                available_category_names_by_type=available_category_names_by_type,
+            )
 
             cursor.execute(
                 """
