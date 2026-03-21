@@ -30,14 +30,146 @@ interface SavedState {
   timestamp: number;
 }
 
+interface FocusLocation {
+  rowId: string | number;
+  columnId: string | number;
+}
+
+interface ActionButtonProps {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  activeColor: string;
+}
+
+interface GridPanelProps {
+  title: string;
+  rowCount: number;
+  width: string;
+  flex: string;
+  rows: Row[];
+  columns: Column[];
+  onCellsChanged: (changes: CellChange[]) => void;
+  onFocusLocationChanged: (loc: any) => void;
+  actions: React.ReactNode;
+}
+
 // ---------- Constants ----------
 const TARGET_COLUMNS = ["Date", "Note", "Amount"] as const;
 const MAX_HISTORY_SIZE = 100;
+const HEADER_ROW_ID = "header";
+const ROW_INDEX_COLUMN_ID = "rowIndex";
+const NORMALIZED_DATA_STORAGE_KEY = "normalizedDataState";
+const API_BASE_URL = "http://localhost:8003";
+const DEBUG_LOGGING = true;
 const COLUMN_WIDTHS = {
   rowIndex: 40,
   Note: 260,
   default: 140,
 } as const;
+
+const GRID_PANEL_HEIGHT = "800px";
+
+const panelHeaderStyle: React.CSSProperties = {
+  position: "sticky",
+  top: 0,
+  left: 0,
+  right: 0,
+  zIndex: 10,
+  backgroundColor: "white",
+  borderBottom: "1px solid #ddd",
+  padding: "8px",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+};
+
+const panelBodyStyle: React.CSSProperties = {
+  height: "calc(100% - 60px)",
+  overflowX: "auto",
+  overflowY: "auto",
+};
+
+const actionGroupStyle: React.CSSProperties = {
+  display: "flex",
+  gap: "0.5rem",
+};
+
+const getActionButtonStyle = (
+  disabled: boolean,
+  activeColor: string
+): React.CSSProperties => ({
+  fontSize: "12px",
+  padding: "4px 8px",
+  backgroundColor: disabled ? "#ccc" : activeColor,
+  color: "white",
+  border: "none",
+  borderRadius: "3px",
+  cursor: disabled ? "not-allowed" : "pointer",
+});
+
+const ActionButton = ({
+  label,
+  onClick,
+  disabled = false,
+  activeColor,
+}: ActionButtonProps) => {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      style={getActionButtonStyle(disabled, activeColor)}
+    >
+      {label}
+    </button>
+  );
+};
+
+const GridPanel = ({
+  title,
+  rowCount,
+  width,
+  flex,
+  rows,
+  columns,
+  onCellsChanged,
+  onFocusLocationChanged,
+  actions,
+}: GridPanelProps) => {
+  return (
+    <div
+      className="grid-wrapper"
+      style={{
+        flex,
+        width,
+        height: GRID_PANEL_HEIGHT,
+        maxWidth: width,
+        maxHeight: GRID_PANEL_HEIGHT,
+        border: "1px solid #444",
+        position: "relative",
+      }}
+    >
+      <div style={panelHeaderStyle}>
+        <h3 style={{ color: "black", margin: 0 }}>
+          {title} ({rowCount} rows)
+        </h3>
+        <div style={actionGroupStyle}>{actions}</div>
+      </div>
+      <div style={panelBodyStyle}>
+        <ReactGrid
+          rows={rows}
+          columns={columns}
+          onCellsChanged={onCellsChanged}
+          onFocusLocationChanged={onFocusLocationChanged}
+          enableRowSelection
+          enableColumnSelection
+          stickyTopRows={1}
+          stickyLeftColumns={1}
+        />
+      </div>
+    </div>
+  );
+};
 
 // ---------- Utils ----------
 
@@ -57,8 +189,17 @@ const getColumnWidth = (
   return Math.min(300, Math.max(80, maxLen * charWidth + padding));
 };
 
-const safeText = (newCell: any): string =>
-  newCell?.text ?? String(newCell?.value ?? "");
+const toDisplayText = (value: unknown): string =>
+  value === null || value === undefined ? "" : String(value);
+
+const getCellText = (cell: any): string =>
+  cell?.text ?? toDisplayText(cell?.value);
+
+const debugLog = (...args: unknown[]) => {
+  if (DEBUG_LOGGING) {
+    console.log("[NormalizedData]", ...args);
+  }
+};
 
 const formatCurrencyNumber = (num: number): string =>
   new Intl.NumberFormat("id-ID").format(num);
@@ -80,6 +221,66 @@ const parseAmount = (text: string): number => {
   const num = Number(cleaned) || 0;
 
   return num;
+};
+
+const convertGridRowsToNormalizedObjects = (
+  gridRows: Row[],
+  gridColumns: Column[]
+): any[] => {
+  const valueColumns = gridColumns.filter(
+    (column) => column.columnId !== ROW_INDEX_COLUMN_ID
+  );
+
+  return gridRows
+    .filter((gridRow) => gridRow.rowId !== HEADER_ROW_ID)
+    .map((gridRow) => {
+      const normalizedRow: any = {};
+      valueColumns.forEach((column, idx) => {
+        const cellIndex = idx + 1; // +1 to skip rowIndex column
+        let cellValue: string | number = getCellText(gridRow.cells[cellIndex]);
+
+        if (column.columnId === "Amount") {
+          cellValue = parseAmount(cellValue);
+        }
+
+        normalizedRow[String(column.columnId).toLowerCase()] = cellValue;
+      });
+
+      return normalizedRow;
+    });
+};
+
+const createGridRowsFromSourceData = (
+  sourceRows: Record<string, any>[],
+  columns: Column[]
+): Row[] => {
+  const headerRow: Row = {
+    rowId: HEADER_ROW_ID,
+    cells: [
+      { type: "header", text: "" },
+      ...columns
+        .slice(1)
+        .map((c) => ({ type: "header" as const, text: String(c.columnId) })),
+    ],
+  };
+
+  const gridDataRows: Row[] = sourceRows.map((sourceRow, idx) => ({
+    rowId: `nrow-${idx}`,
+    cells: [
+      { type: "header", text: String(idx + 1) },
+      ...columns.slice(1).map((col) => {
+        const matchingKey = Object.keys(sourceRow).find(
+          (k) => k.toLowerCase() === String(col.columnId).toLowerCase()
+        );
+        return {
+          type: "text" as const,
+          text: toDisplayText(matchingKey ? sourceRow[matchingKey] : ""),
+        };
+      }),
+    ],
+  }));
+
+  return [headerRow, ...gridDataRows];
 };
 
 // ---------- Custom Hooks ----------
@@ -162,8 +363,8 @@ export function NormalizedData() {
   const [originalGridRows, setOriginalGridRows] = useState<Row[]>([]);
   const [normalizedGridCols, setNormalizedGridCols] = useState<Column[]>([]);
   const [normalizedGridRows, setNormalizedGridRows] = useState<Row[]>([]);
-  const [originalFocus, setOriginalFocus] = useState<any>(null);
-  const [normalizedFocus, setNormalizedFocus] = useState<any>(null);
+  const [originalFocus, setOriginalFocus] = useState<FocusLocation | null>(null);
+  const [normalizedFocus, setNormalizedFocus] = useState<FocusLocation | null>(null);
   const [isCalculated, setIsCalculated] = useState<boolean>(false);
 
   // Reset calculation state when normalized data changes
@@ -171,15 +372,11 @@ export function NormalizedData() {
     setIsCalculated(false);
   }, [normalizedRows]);
 
-  useEffect(() => {
-    console.log("Normalized Focus:", normalizedFocus);
-  }, [normalizedFocus]);
-
   // History management
-  const { pushState, undo, redo, reset: resetHistory } = useHistory();
+  const { pushState, undo, redo } = useHistory();
 
-  // Memorized values
-  const originalHeaders = useMemo(
+  // Memoized values
+  const sourceHeaders = useMemo(
     () => (data ? Object.keys(data.rows[0] || {}) : []),
     [data]
   );
@@ -192,56 +389,6 @@ export function NormalizedData() {
     );
     return { count, sum };
   }, [normalizedRows]);
-
-  // ---------- Helper Functions ----------
-  const rowsToObjects = useCallback((rows: Row[], cols: Column[]): any[] => {
-    const dataCols = cols.filter((c) => c.columnId !== "rowIndex");
-    return rows
-      .filter((r) => r.rowId !== "header")
-      .map((r) => {
-        const obj: any = {};
-        dataCols.forEach((col, idx) => {
-          const cellIndex = idx + 1; // +1 to skip rowIndex column
-          let val = r.cells[cellIndex]?.text ?? "";
-
-          if (col.columnId === "Amount") {
-            val = parseAmount(val);
-          }
-          obj[col.columnId.toLowerCase()] = val;
-        });
-        return obj;
-      });
-  }, []);
-
-  const buildGridRows = useCallback(
-    (dataRows: Record<string, any>[], columns: Column[]): Row[] => {
-      const headerRow: Row = {
-        rowId: "header",
-        cells: [
-          { type: "header", text: "" },
-          ...columns
-            .slice(1)
-            .map((c) => ({ type: "header", text: c.columnId })),
-        ],
-      };
-
-      const dataRowsGrid: Row[] = dataRows.map((row, idx) => ({
-        rowId: `nrow-${idx}`,
-        cells: [
-          { type: "header", text: String(idx + 1) },
-          ...columns.slice(1).map((col) => {
-            const key = Object.keys(row).find(
-              (k) => k.toLowerCase() === col.columnId.toLowerCase()
-            );
-            return { type: "text", text: String(row[key] || "") };
-          }),
-        ],
-      }));
-
-      return [headerRow, ...dataRowsGrid];
-    },
-    []
-  );
 
   // ---------- Event Handlers ----------
   const handleUndo = useCallback(() => {
@@ -297,8 +444,8 @@ export function NormalizedData() {
     return () => document.removeEventListener("keydown", handleKeyDown, true);
   }, [handleUndo, handleRedo]);
 
-  // File handling - Modified to preserve normalized data
-  const handleFileChange = useCallback(
+  // Load a source file into the original grid while preserving normalized data.
+  const handleSourceFileChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
@@ -307,7 +454,7 @@ export function NormalizedData() {
       formData.append("file", file);
 
       try {
-        const response = await fetch("http://localhost:8003/parse", {
+        const response = await fetch(`${API_BASE_URL}/parse`, {
           method: "POST",
           body: formData,
         });
@@ -316,146 +463,149 @@ export function NormalizedData() {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
 
-        const result: ParsedData = await response.json();
+        const parsedData: ParsedData = await response.json();
 
-        setData(result);
+        setData(parsedData);
 
-        const keys = Object.keys(result.rows[0] || {});
-        const columns: Column[] = [
+        const sourceColumnIds = Object.keys(parsedData.rows[0] || {});
+        const sourceColumns: Column[] = [
           {
             columnId: "rowIndex",
             width: COLUMN_WIDTHS.rowIndex,
             resizable: false,
           },
-          ...keys.map((header) => ({
+          ...sourceColumnIds.map((header) => ({
             columnId: header,
-            width: getColumnWidth(header, result.rows),
+            width: getColumnWidth(header, parsedData.rows),
             resizable: true,
           })),
         ];
 
-        const gridRows = buildGridRows(result.rows, [
+        const sourceGridRows = createGridRowsFromSourceData(parsedData.rows, [
           {
             columnId: "rowIndex",
             width: COLUMN_WIDTHS.rowIndex,
             resizable: false,
           },
-          ...keys.map((k) => ({ columnId: k, width: 100, resizable: true })),
+          ...sourceColumnIds.map((columnId) => ({
+            columnId,
+            width: 100,
+            resizable: true,
+          })),
         ]);
 
-        setOriginalGridCols(columns);
-        setOriginalGridRows(gridRows);
-        // DON'T reset normalized data - preserve it when uploading new files
-        // setNormalizedGridCols([]);
-        // setNormalizedGridRows([]);
-        // setNormalizedRows([]);
+        setOriginalGridCols(sourceColumns);
+        setOriginalGridRows(sourceGridRows);
         setSubmitMessage("");
         setMapping({});
-        // Only reset history for original data operations
-        // resetHistory();
       } catch (err) {
         console.error("Parsing error:", err);
       }
     },
-    [buildGridRows]
+    []
   );
 
-  // Normalization
-  const handleNormalize = useCallback(() => {
+  // Normalize mapped source columns and append them to the normalized grid.
+  const handleAppendNormalizedData = useCallback(() => {
     if (!originalGridRows.length) return;
 
-    const selectedTargets = Object.values(mapping).filter(Boolean);
-    if (!selectedTargets.length) {
+    const selectedMappedTargets = Object.values(mapping).filter(Boolean);
+    if (!selectedMappedTargets.length) {
       setSubmitMessage("Please map at least one column before normalizing.");
       return;
     }
 
-    const usedTargets = TARGET_COLUMNS.filter((t) =>
-      selectedTargets.includes(t)
+    const targetColumnsToInclude = TARGET_COLUMNS.filter((targetColumn) =>
+      selectedMappedTargets.includes(targetColumn)
     );
 
-    // Set up columns if this is the first normalization
-    let columns: Column[] = normalizedGridCols;
+    // Initialize normalized columns on first run only.
+    let normalizedColumns: Column[] = normalizedGridCols;
     if (!normalizedGridCols.length) {
-      columns = [
+      normalizedColumns = [
         {
           columnId: "rowIndex",
           width: COLUMN_WIDTHS.rowIndex,
           resizable: false,
         },
-        ...usedTargets.map((t) => ({
-          columnId: t,
+        ...targetColumnsToInclude.map((targetColumn) => ({
+          columnId: targetColumn,
           width:
-            COLUMN_WIDTHS[t as keyof typeof COLUMN_WIDTHS] ||
+            COLUMN_WIDTHS[targetColumn as keyof typeof COLUMN_WIDTHS] ||
             COLUMN_WIDTHS.default,
           resizable: true,
         })),
       ];
-      setNormalizedGridCols(columns);
+      setNormalizedGridCols(normalizedColumns);
     }
 
-    const dataRows = originalGridRows.filter((r) => r.rowId !== "header");
-    const newNormalizedObjects: any[] = [];
-    const newNormalizedGridRowsData: Row[] = [];
+    const sourceDataRows = originalGridRows.filter(
+      (row) => row.rowId !== HEADER_ROW_ID
+    );
+    const normalizedRowsToAppend: any[] = [];
+    const normalizedGridRowsToAppend: Row[] = [];
 
-    // Get the current count of normalized rows to continue row numbering
+    // Continue row numbering from existing normalized rows.
     const currentRowCount = normalizedRows.length;
 
-    dataRows.forEach((origRow, idx) => {
-      const obj: any = {};
-      const cells = [
+    sourceDataRows.forEach((sourceRow, idx) => {
+      const normalizedRow: any = {};
+      const gridCells: any[] = [
         { type: "header", text: String(currentRowCount + idx + 1) },
       ];
 
-      usedTargets.forEach((targetField) => {
-        const origColIndex = originalGridCols.findIndex(
-          (col) => mapping[col.columnId] === targetField
+      targetColumnsToInclude.forEach((targetColumn) => {
+        const sourceColumnIndex = originalGridCols.findIndex(
+          (column) => mapping[column.columnId] === targetColumn
         );
 
-        let text = "";
-        if (origColIndex >= 0) {
-          text = origRow.cells[origColIndex]?.text ?? "";
+        let cellText = "";
+        if (sourceColumnIndex >= 0) {
+          cellText = getCellText(sourceRow.cells[sourceColumnIndex]);
         }
 
-        if (targetField === "Amount") {
-          obj.amount = parseAmount(text);
+        if (targetColumn === "Amount") {
+          normalizedRow.amount = parseAmount(cellText);
         } else {
-          obj[targetField.toLowerCase()] = text;
+          normalizedRow[targetColumn.toLowerCase()] = cellText;
         }
 
-        cells.push({ type: "text", text });
+        gridCells.push({ type: "text", text: cellText });
       });
 
-      newNormalizedObjects.push(obj);
-      newNormalizedGridRowsData.push({
+      normalizedRowsToAppend.push(normalizedRow);
+      normalizedGridRowsToAppend.push({
         rowId: `nrow-${currentRowCount + idx}`,
-        cells,
+        cells: gridCells,
       });
     });
 
-    // Append to existing normalized data instead of replacing
+    // Append to normalized data instead of replacing it.
     const updatedNormalizedObjects = [
       ...normalizedRows,
-      ...newNormalizedObjects,
+      ...normalizedRowsToAppend,
     ];
 
     // Create header row if needed
     const headerRow: Row = {
-      rowId: "header",
+      rowId: HEADER_ROW_ID,
       cells: [
         { type: "header", text: "" },
-        ...usedTargets.map((t) => ({ type: "header", text: t })),
+        ...targetColumnsToInclude.map((targetColumn) => ({
+          type: "header" as const,
+          text: targetColumn,
+        })),
       ],
     };
 
-    // Append new rows to existing normalized grid rows
+    // Append rows under a single header row.
     const existingDataRows = normalizedGridRows.filter(
-      (r) => r.rowId !== "header"
+      (r) => r.rowId !== HEADER_ROW_ID
     );
     const allRows = [
       headerRow,
       ...existingDataRows,
-      ...newNormalizedGridRowsData,
+      ...normalizedGridRowsToAppend,
     ];
 
     setNormalizedRows(updatedNormalizedObjects);
@@ -467,7 +617,7 @@ export function NormalizedData() {
       originalGridRows,
       normalizedGridRows: allRows,
       normalizedRows: updatedNormalizedObjects,
-      normalizedGridCols: columns,
+      normalizedGridCols: normalizedColumns,
     });
   }, [
     originalGridRows,
@@ -479,8 +629,8 @@ export function NormalizedData() {
     normalizedGridCols,
   ]);
 
-  // Grid change handlers
-  const handleOriginalChanges = useCallback(
+  // Grid edit handlers
+  const handleOriginalGridChanges = useCallback(
     (changes: CellChange[]) => {
       if (!changes?.length) return;
 
@@ -493,7 +643,7 @@ export function NormalizedData() {
           cells: row.cells.map((cell, idx) => {
             const colId = originalGridCols[idx]?.columnId;
             const change = rowChanges.find((c) => c.columnId === colId);
-            return change ? { ...cell, text: safeText(change.newCell) } : cell;
+            return change ? { ...cell, text: getCellText(change.newCell) } : cell;
           }),
         };
       });
@@ -520,7 +670,7 @@ export function NormalizedData() {
     ]
   );
 
-  const handleNormalizedChanges = useCallback(
+  const handleNormalizedGridChanges = useCallback(
     (changes: CellChange[]) => {
       if (!changes?.length) return;
 
@@ -533,7 +683,7 @@ export function NormalizedData() {
           cells: row.cells.map((cell, idx) => {
             const colId = normalizedGridCols[idx]?.columnId;
             const change = rowChanges.find((c) => c.columnId === colId);
-            return change ? { ...cell, text: safeText(change.newCell) } : cell;
+            return change ? { ...cell, text: getCellText(change.newCell) } : cell;
           }),
         };
       });
@@ -543,7 +693,7 @@ export function NormalizedData() {
         return;
       }
 
-      const newObjects = rowsToObjects(updatedRows, normalizedGridCols);
+      const newObjects = convertGridRowsToNormalizedObjects(updatedRows, normalizedGridCols);
 
       setNormalizedGridRows(updatedRows);
       setNormalizedRows(newObjects);
@@ -554,20 +704,12 @@ export function NormalizedData() {
         normalizedGridCols,
       });
     },
-    [normalizedGridRows, normalizedGridCols, rowsToObjects, pushState]
-  );
-
-  // Note: column resize events require paid grid version
-  const handleColumnsChanged = useCallback(
-    (changes: { columnId: string; width: number }[]) => {
-      setOriginalGridCols((prev) =>
-        prev.map((col) => {
-          const change = changes.find((c) => c.columnId === col.columnId);
-          return change ? { ...col, width: change.width } : col;
-        })
-      );
-    },
-    []
+    [
+      normalizedGridRows,
+      normalizedGridCols,
+      convertGridRowsToNormalizedObjects,
+      pushState,
+    ]
   );
 
   // Download and submit
@@ -631,7 +773,7 @@ export function NormalizedData() {
       }
 
       // Check category types exist
-      const response = await fetch("http://localhost:8003/categories/types");
+      const response = await fetch(`${API_BASE_URL}/categories/types`);
       if (!response.ok) {
         throw new Error("Failed to check category types");
       }
@@ -649,7 +791,7 @@ export function NormalizedData() {
       }
 
       // Submit the data
-      const submitResponse = await fetch("http://localhost:8003/transactions/import", {
+      const submitResponse = await fetch(`${API_BASE_URL}/transactions/import`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -663,7 +805,7 @@ export function NormalizedData() {
       }
 
       const result = await submitResponse.json();
-      const { count, sum } = normalizedSummary;
+      const { sum } = normalizedSummary;
       setSubmitMessage(
         `Successfully added ${result.inserted} transactions with sum amount ${formatCurrencyNumber(sum)}.`
       );
@@ -671,7 +813,8 @@ export function NormalizedData() {
       console.log("Submitted normalized rows:", normalizedRows);
     } catch (error) {
       console.error("Submit error:", error);
-      setSubmitMessage(`Error: ${error.message}`);
+      const message = error instanceof Error ? error.message : "Unknown error";
+      setSubmitMessage(`Error: ${message}`);
     }
   }, [normalizedSummary, normalizedRows, isCalculated]);
 
@@ -690,7 +833,7 @@ export function NormalizedData() {
     };
 
     try {
-      localStorage.setItem("normalizedDataState", JSON.stringify(savedState));
+      localStorage.setItem(NORMALIZED_DATA_STORAGE_KEY, JSON.stringify(savedState));
       alert("Normalized data saved successfully!");
     } catch (error) {
       console.error("Error saving data:", error);
@@ -700,7 +843,7 @@ export function NormalizedData() {
 
   const handleLoad = useCallback(() => {
     try {
-      const savedData = localStorage.getItem("normalizedDataState");
+      const savedData = localStorage.getItem(NORMALIZED_DATA_STORAGE_KEY);
       if (!savedData) {
         alert("No saved data found!");
         return;
@@ -730,46 +873,38 @@ export function NormalizedData() {
     }
   }, []);
 
-  // Delete functions with enhanced debugging
-  const deleteSelectedOriginalRow = useCallback(() => {
-    console.log("🔴 DELETE ROW CLICKED - Original");
-    console.log("originalFocus:", originalFocus);
-    console.log("originalGridRows.length:", originalGridRows.length);
+  // Delete the focused row in the original grid.
+  const handleDeleteOriginalRow = useCallback(() => {
+    debugLog("Delete row requested on original grid", {
+      focus: originalFocus,
+      rowCount: originalGridRows.length,
+    });
 
     if (!originalGridRows.length) {
-      console.log("❌ No rows to delete");
+      debugLog("Original grid has no rows to delete.");
       return;
     }
 
     if (!originalFocus) {
-      console.log("❌ No focus - try clicking on a row number first");
+      debugLog("Original grid has no active focus.");
       return;
     }
 
-    const { rowId, columnId } = originalFocus;
-    console.log("Focus details - rowId:", rowId, "columnId:", columnId);
+    const { rowId } = originalFocus;
 
-    // More flexible row deletion - allow if we have a valid rowId that's not header
-    if (rowId === "header") {
-      console.log("❌ Cannot delete header row");
+    if (rowId === HEADER_ROW_ID) {
+      debugLog("Header row cannot be deleted on original grid.");
       return;
     }
 
     if (!rowId || rowId === "") {
-      console.log("❌ Invalid rowId");
+      debugLog("Original rowId is invalid.", { rowId });
       return;
     }
 
-    console.log("✅ Deleting row:", rowId);
     const updatedRows = originalGridRows.filter((r) => r.rowId !== rowId);
-    console.log(
-      "Rows before:",
-      originalGridRows.length,
-      "after:",
-      updatedRows.length
-    );
 
-    // Update the data state as well to keep it in sync
+    // Keep parsed source data aligned with the visible original grid.
     if (data) {
       const rowIndex = originalGridRows.findIndex((r) => r.rowId === rowId) - 1; // -1 because header is at index 0
       if (rowIndex >= 0 && rowIndex < data.rows.length) {
@@ -780,8 +915,8 @@ export function NormalizedData() {
 
     setOriginalGridRows(updatedRows);
 
-    // Maintain focus after deletion - find next available row
-    const remainingDataRows = updatedRows.filter((r) => r.rowId !== "header");
+    // Move focus to the nearest available row.
+    const remainingDataRows = updatedRows.filter((r) => r.rowId !== HEADER_ROW_ID);
     if (remainingDataRows.length > 0) {
       // Try to focus on the same position, or the last row if we deleted the last one
       const deletedIndex =
@@ -791,7 +926,7 @@ export function NormalizedData() {
       if (nextRow) {
         setOriginalFocus({
           rowId: nextRow.rowId,
-          columnId: originalFocus.columnId || "rowIndex",
+          columnId: originalFocus.columnId || ROW_INDEX_COLUMN_ID,
         });
       }
     } else {
@@ -813,54 +948,43 @@ export function NormalizedData() {
     data,
   ]);
 
-  const deleteSelectedOriginalColumn = useCallback(() => {
-    console.log("🔴 DELETE COLUMN CLICKED - Original");
-    console.log("originalFocus:", originalFocus);
-    console.log(
-      "originalGridCols:",
-      originalGridCols.map((c) => c.columnId)
-    );
+  // Delete the focused column in the original grid.
+  const handleDeleteOriginalColumn = useCallback(() => {
+    debugLog("Delete column requested on original grid", {
+      focus: originalFocus,
+      columns: originalGridCols.map((c) => c.columnId),
+    });
 
     if (!originalGridRows.length) {
-      console.log("❌ No data to delete from");
+      debugLog("Original grid has no data to delete from.");
       return;
     }
 
     if (!originalFocus) {
-      console.log("❌ No focus - try clicking on a column header first");
+      debugLog("Original grid has no active focus.");
       return;
     }
 
-    const { rowId, columnId } = originalFocus;
-    console.log("Focus details - rowId:", rowId, "columnId:", columnId);
+    const { columnId } = originalFocus;
 
-    // More flexible column deletion
-    if (columnId === "rowIndex") {
-      console.log("❌ Cannot delete row index column");
+    if (columnId === ROW_INDEX_COLUMN_ID) {
+      debugLog("Row index column cannot be deleted.");
       return;
     }
 
     if (!columnId || columnId === "") {
-      console.log("❌ Invalid columnId");
+      debugLog("Original columnId is invalid.", { columnId });
       return;
     }
 
     const colIndex = originalGridCols.findIndex((c) => c.columnId === columnId);
-    console.log("Column index:", colIndex);
 
     if (colIndex < 0) {
-      console.log("❌ Column not found");
+      debugLog("Original column not found.", { columnId });
       return;
     }
 
-    console.log("✅ Deleting column:", columnId);
     const newCols = originalGridCols.filter((c) => c.columnId !== columnId);
-    console.log(
-      "Columns before:",
-      originalGridCols.length,
-      "after:",
-      newCols.length
-    );
 
     const updatedRows = originalGridRows.map((row) => ({
       ...row,
@@ -870,8 +994,8 @@ export function NormalizedData() {
     setOriginalGridCols(newCols);
     setOriginalGridRows(updatedRows);
 
-    // Maintain focus after column deletion - find next available column
-    const remainingCols = newCols.filter((c) => c.columnId !== "rowIndex");
+    // Move focus to the nearest available column.
+    const remainingCols = newCols.filter((c) => c.columnId !== ROW_INDEX_COLUMN_ID);
     if (remainingCols.length > 0) {
       // Try to focus on the same position, or the last column if we deleted the last one
       const deletedIndex =
@@ -882,7 +1006,7 @@ export function NormalizedData() {
         // Use setTimeout to ensure the grid updates before setting focus
         setTimeout(() => {
           setOriginalFocus({
-            rowId: originalFocus.rowId || "header",
+            rowId: originalFocus.rowId || HEADER_ROW_ID,
             columnId: nextCol.columnId,
           });
         }, 10);
@@ -890,8 +1014,8 @@ export function NormalizedData() {
     } else {
       setTimeout(() => {
         setOriginalFocus({
-          rowId: originalFocus.rowId || "header",
-          columnId: "rowIndex",
+          rowId: originalFocus.rowId || HEADER_ROW_ID,
+          columnId: ROW_INDEX_COLUMN_ID,
         });
       }, 10);
     }
@@ -911,51 +1035,44 @@ export function NormalizedData() {
     pushState,
   ]);
 
-  const deleteSelectedNormalizedRow = useCallback(() => {
-    console.log("🔴 DELETE ROW CLICKED - Normalized");
-    console.log("normalizedFocus:", normalizedFocus);
-    console.log("normalizedGridRows.length:", normalizedGridRows.length);
+  // Delete the focused row in the normalized grid.
+  const handleDeleteNormalizedRow = useCallback(() => {
+    debugLog("Delete row requested on normalized grid", {
+      focus: normalizedFocus,
+      rowCount: normalizedGridRows.length,
+    });
 
     if (!normalizedGridRows.length) {
-      console.log("❌ No rows to delete");
+      debugLog("Normalized grid has no rows to delete.");
       return;
     }
 
     if (!normalizedFocus) {
-      console.log("❌ No focus - try clicking on a row number first");
+      debugLog("Normalized grid has no active focus.");
       return;
     }
 
-    const { rowId, columnId } = normalizedFocus;
-    console.log("Focus details - rowId:", rowId, "columnId:", columnId);
+    const { rowId } = normalizedFocus;
 
-    // More flexible row deletion
-    if (rowId === "header") {
-      console.log("❌ Cannot delete header row");
+    if (rowId === HEADER_ROW_ID) {
+      debugLog("Header row cannot be deleted on normalized grid.");
       return;
     }
 
     if (!rowId || rowId === "") {
-      console.log("❌ Invalid rowId");
+      debugLog("Normalized rowId is invalid.", { rowId });
       return;
     }
 
-    console.log("✅ Deleting row:", rowId);
     const updatedRows = normalizedGridRows.filter((r) => r.rowId !== rowId);
-    console.log(
-      "Rows before:",
-      normalizedGridRows.length,
-      "after:",
-      updatedRows.length
-    );
 
-    const newObjects = rowsToObjects(updatedRows, normalizedGridCols);
+    const newObjects = convertGridRowsToNormalizedObjects(updatedRows, normalizedGridCols);
 
     setNormalizedGridRows(updatedRows);
     setNormalizedRows(newObjects);
 
-    // Maintain focus after deletion - find next available row
-    const remainingDataRows = updatedRows.filter((r) => r.rowId !== "header");
+    // Move focus to the nearest available row.
+    const remainingDataRows = updatedRows.filter((r) => r.rowId !== HEADER_ROW_ID);
     if (remainingDataRows.length > 0) {
       // Try to focus on the same position, or the last row if we deleted the last one
       const deletedIndex =
@@ -966,7 +1083,7 @@ export function NormalizedData() {
         setTimeout(() => {
           setNormalizedFocus({
             rowId: nextRow.rowId,
-            columnId: normalizedFocus.columnId || "rowIndex",
+            columnId: normalizedFocus.columnId || ROW_INDEX_COLUMN_ID,
           });
         }, 10);
       }
@@ -978,80 +1095,70 @@ export function NormalizedData() {
       originalGridRows,
       normalizedGridRows: updatedRows,
       normalizedRows: newObjects,
+      normalizedGridCols,
     });
   }, [
     normalizedGridRows,
     normalizedFocus,
     normalizedGridCols,
     originalGridRows,
-    rowsToObjects,
+    convertGridRowsToNormalizedObjects,
     pushState,
   ]);
 
-  const deleteSelectedNormalizedColumn = useCallback(() => {
-    console.log("🔴 DELETE COLUMN CLICKED - Normalized");
-    console.log("normalizedFocus:", normalizedFocus);
-    console.log(
-      "normalizedGridCols:",
-      normalizedGridCols.map((c) => c.columnId)
-    );
+  // Delete the focused column in the normalized grid.
+  const handleDeleteNormalizedColumn = useCallback(() => {
+    debugLog("Delete column requested on normalized grid", {
+      focus: normalizedFocus,
+      columns: normalizedGridCols.map((c) => c.columnId),
+    });
 
     if (!normalizedGridRows.length) {
-      console.log("❌ No data to delete from");
+      debugLog("Normalized grid has no data to delete from.");
       return;
     }
 
     if (!normalizedFocus) {
-      console.log("❌ No focus - try clicking on a column header first");
+      debugLog("Normalized grid has no active focus.");
       return;
     }
 
-    const { rowId, columnId } = normalizedFocus;
-    console.log("Focus details - rowId:", rowId, "columnId:", columnId);
+    const { columnId } = normalizedFocus;
 
-    // More flexible column deletion
-    if (columnId === "rowIndex") {
-      console.log("❌ Cannot delete row index column");
+    if (columnId === ROW_INDEX_COLUMN_ID) {
+      debugLog("Row index column cannot be deleted.");
       return;
     }
 
     if (!columnId || columnId === "") {
-      console.log("❌ Invalid columnId");
+      debugLog("Normalized columnId is invalid.", { columnId });
       return;
     }
 
     const colIndex = normalizedGridCols.findIndex(
       (c) => c.columnId === columnId
     );
-    console.log("Column index:", colIndex);
 
     if (colIndex < 0) {
-      console.log("❌ Column not found");
+      debugLog("Normalized column not found.", { columnId });
       return;
     }
 
-    console.log("✅ Deleting column:", columnId);
     const newCols = normalizedGridCols.filter((c) => c.columnId !== columnId);
-    console.log(
-      "Columns before:",
-      normalizedGridCols.length,
-      "after:",
-      newCols.length
-    );
 
     const updatedRows = normalizedGridRows.map((row) => ({
       ...row,
       cells: row.cells.filter((_, idx) => idx !== colIndex),
     }));
 
-    const newObjects = rowsToObjects(updatedRows, newCols);
+    const newObjects = convertGridRowsToNormalizedObjects(updatedRows, newCols);
 
     setNormalizedGridCols(newCols);
     setNormalizedGridRows(updatedRows);
     setNormalizedRows(newObjects);
 
-    // Maintain focus after column deletion - find next available column
-    const remainingCols = newCols.filter((c) => c.columnId !== "rowIndex");
+    // Move focus to the nearest available column.
+    const remainingCols = newCols.filter((c) => c.columnId !== ROW_INDEX_COLUMN_ID);
     if (remainingCols.length > 0) {
       // Try to focus on the same position, or the last column if we deleted the last one
       const deletedIndex =
@@ -1061,7 +1168,7 @@ export function NormalizedData() {
       if (nextCol) {
         setTimeout(() => {
           setNormalizedFocus({
-            rowId: normalizedFocus.rowId || "header",
+            rowId: normalizedFocus.rowId || HEADER_ROW_ID,
             columnId: nextCol.columnId,
           });
         }, 10);
@@ -1069,8 +1176,8 @@ export function NormalizedData() {
     } else {
       setTimeout(() => {
         setNormalizedFocus({
-          rowId: normalizedFocus.rowId || "header",
-          columnId: "rowIndex",
+          rowId: normalizedFocus.rowId || HEADER_ROW_ID,
+          columnId: ROW_INDEX_COLUMN_ID,
         });
       }, 10);
     }
@@ -1079,13 +1186,14 @@ export function NormalizedData() {
       originalGridRows,
       normalizedGridRows: updatedRows,
       normalizedRows: newObjects,
+      normalizedGridCols: newCols,
     });
   }, [
     normalizedGridRows,
     normalizedGridCols,
     normalizedFocus,
     originalGridRows,
-    rowsToObjects,
+    convertGridRowsToNormalizedObjects,
     pushState,
   ]);
 
@@ -1102,117 +1210,40 @@ export function NormalizedData() {
       <title>Data Normalization</title>
       {/* Original Data Grid */}
       {data && (
-        <div
-          className="grid-wrapper"
-          style={{
-            flex: "0 0 800px",
-            width: "800px",
-            height: "800px",
-            maxWidth: "800px",
-            maxHeight: "800px",
-            border: "1px solid #444",
-            position: "relative",
-          }}
-        >
-          <div
-            style={{
-              position: "sticky",
-              top: 0,
-              left: 0,
-              right: 0,
-              zIndex: 10,
-              backgroundColor: "white",
-              borderBottom: "1px solid #ddd",
-              padding: "8px",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            <h3 style={{ color: "black", margin: 0 }}>
-              Original Data ({data.rows.length} rows)
-            </h3>
-            <div style={{ display: "flex", gap: "0.5rem" }}>
-              <button
-                onClick={deleteSelectedOriginalRow}
+        <GridPanel
+          title="Original Data"
+          rowCount={data.rows.length}
+          width="800px"
+          flex="0 0 800px"
+          rows={originalGridRows}
+          columns={originalGridCols}
+          onCellsChanged={handleOriginalGridChanges}
+          onFocusLocationChanged={(loc) => setOriginalFocus(loc)}
+          actions={
+            <>
+              <ActionButton
+                label="Delete Row"
+                onClick={handleDeleteOriginalRow}
                 disabled={
                   !originalFocus ||
-                  originalFocus.rowId === "header" ||
+                  originalFocus.rowId === HEADER_ROW_ID ||
                   !originalFocus.rowId
                 }
-                style={{
-                  fontSize: "12px",
-                  padding: "4px 8px",
-                  backgroundColor:
-                    originalFocus &&
-                    originalFocus.rowId !== "header" &&
-                    originalFocus.rowId
-                      ? "#ff6b6b"
-                      : "#ccc",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "3px",
-                  cursor:
-                    originalFocus &&
-                    originalFocus.rowId !== "header" &&
-                    originalFocus.rowId
-                      ? "pointer"
-                      : "not-allowed",
-                }}
-              >
-                Delete Row
-              </button>
-              <button
-                onClick={deleteSelectedOriginalColumn}
+                activeColor="#ff6b6b"
+              />
+              <ActionButton
+                label="Delete Column"
+                onClick={handleDeleteOriginalColumn}
                 disabled={
                   !originalFocus ||
-                  originalFocus.columnId === "rowIndex" ||
+                  originalFocus.columnId === ROW_INDEX_COLUMN_ID ||
                   !originalFocus.columnId
                 }
-                style={{
-                  fontSize: "12px",
-                  padding: "4px 8px",
-                  backgroundColor:
-                    originalFocus &&
-                    originalFocus.columnId !== "rowIndex" &&
-                    originalFocus.columnId
-                      ? "#ff6b6b"
-                      : "#ccc",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "3px",
-                  cursor:
-                    originalFocus &&
-                    originalFocus.columnId !== "rowIndex" &&
-                    originalFocus.columnId
-                      ? "pointer"
-                      : "not-allowed",
-                }}
-              >
-                Delete Column
-              </button>
-            </div>
-          </div>
-          <div
-            style={{
-              height: "calc(100% - 60px)",
-              overflowX: "auto",
-              overflowY: "auto",
-            }}
-          >
-            <ReactGrid
-              rows={originalGridRows}
-              columns={originalGridCols}
-              onCellsChanged={handleOriginalChanges}
-              onColumnsChanged={handleColumnsChanged}
-              onFocusLocationChanged={(loc) => setOriginalFocus(loc)}
-              enableRowSelection
-              enableColumnSelection
-              stickyTopRows={1}
-              stickyLeftColumns={1}
-            />
-          </div>
-        </div>
+                activeColor="#ff6b6b"
+              />
+            </>
+          }
+        />
       )}
 
       {/* Control Panel */}
@@ -1222,7 +1253,7 @@ export function NormalizedData() {
             type="file"
             id="file-upload"
             accept=".json,.txt,.xlsx,.csv"
-            onChange={handleFileChange}
+            onChange={handleSourceFileChange}
           />
           <label htmlFor="file-upload" className="file-upload-label">
             Choose File
@@ -1233,7 +1264,7 @@ export function NormalizedData() {
         {data && (
           <>
             <h4>Column mapping</h4>
-            {originalHeaders.map((header) => (
+            {sourceHeaders.map((header) => (
               <div key={header} style={{ marginBottom: "0.5rem" }}>
                 <label style={{ marginRight: "0.5rem" }}>{header}</label>
                 <select
@@ -1262,7 +1293,7 @@ export function NormalizedData() {
                 marginTop: "1rem",
               }}
             >
-              <button onClick={handleNormalize}>Add Data</button>
+              <button onClick={handleAppendNormalizedData}>Add Data</button>
               <button
                 onClick={handleDownload}
                 disabled={!normalizedRows.length}
@@ -1288,145 +1319,51 @@ export function NormalizedData() {
 
       {/* Normalized Data Grid */}
       {data && normalizedGridRows.length > 0 && (
-        <div
-          className="grid-wrapper"
-          style={{
-            flex: "0 0 650px",
-            width: "600px",
-            height: "800px",
-            maxWidth: "600px",
-            maxHeight: "800px",
-            border: "1px solid #444",
-            position: "relative",
-          }}
-        >
-          <div
-            style={{
-              position: "sticky",
-              top: 0,
-              left: 0,
-              right: 0,
-              zIndex: 10,
-              backgroundColor: "white",
-              borderBottom: "1px solid #ddd",
-              padding: "8px",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            <h3 style={{ color: "black", margin: 0 }}>
-              Normalized Data ({normalizedRows.length} rows)
-            </h3>
-            <div style={{ display: "flex", gap: "0.5rem" }}>
-              <button
+        <GridPanel
+          title="Normalized Data"
+          rowCount={normalizedRows.length}
+          width="600px"
+          flex="0 0 650px"
+          rows={normalizedGridRows}
+          columns={normalizedGridCols}
+          onCellsChanged={handleNormalizedGridChanges}
+          onFocusLocationChanged={(loc) => setNormalizedFocus(loc)}
+          actions={
+            <>
+              <ActionButton
+                label="Save"
                 onClick={handleSave}
                 disabled={!normalizedRows.length}
-                style={{
-                  fontSize: "12px",
-                  padding: "4px 8px",
-                  backgroundColor: normalizedRows.length ? "#4CAF50" : "#ccc",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "3px",
-                  cursor: normalizedRows.length ? "pointer" : "not-allowed",
-                }}
-              >
-                Save
-              </button>
-              <button
+                activeColor="#4CAF50"
+              />
+              <ActionButton
+                label="Load"
                 onClick={handleLoad}
-                style={{
-                  fontSize: "12px",
-                  padding: "4px 8px",
-                  backgroundColor: "#2196F3",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "3px",
-                  cursor: "pointer",
-                }}
-              >
-                Load
-              </button>
-              <button
-                onClick={deleteSelectedNormalizedRow}
+                activeColor="#2196F3"
+              />
+              <ActionButton
+                label="Delete Row"
+                onClick={handleDeleteNormalizedRow}
                 disabled={
                   !normalizedFocus ||
-                  normalizedFocus.rowId === "header" ||
+                  normalizedFocus.rowId === HEADER_ROW_ID ||
                   !normalizedFocus.rowId
                 }
-                style={{
-                  fontSize: "12px",
-                  padding: "4px 8px",
-                  backgroundColor:
-                    normalizedFocus &&
-                    normalizedFocus.rowId !== "header" &&
-                    normalizedFocus.rowId
-                      ? "#ff6b6b"
-                      : "#ccc",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "3px",
-                  cursor:
-                    normalizedFocus &&
-                    normalizedFocus.rowId !== "header" &&
-                    normalizedFocus.rowId
-                      ? "pointer"
-                      : "not-allowed",
-                }}
-              >
-                Delete Row
-              </button>
-              <button
-                onClick={deleteSelectedNormalizedColumn}
+                activeColor="#ff6b6b"
+              />
+              <ActionButton
+                label="Delete Column"
+                onClick={handleDeleteNormalizedColumn}
                 disabled={
                   !normalizedFocus ||
-                  normalizedFocus.columnId === "rowIndex" ||
+                  normalizedFocus.columnId === ROW_INDEX_COLUMN_ID ||
                   !normalizedFocus.columnId
                 }
-                style={{
-                  fontSize: "12px",
-                  padding: "4px 8px",
-                  backgroundColor:
-                    normalizedFocus &&
-                    normalizedFocus.columnId !== "rowIndex" &&
-                    normalizedFocus.columnId
-                      ? "#ff6b6b"
-                      : "#ccc",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "3px",
-                  cursor:
-                    normalizedFocus &&
-                    normalizedFocus.columnId !== "rowIndex" &&
-                    normalizedFocus.columnId
-                      ? "pointer"
-                      : "not-allowed",
-                }}
-              >
-                Delete Column
-              </button>
-            </div>
-          </div>
-          <div
-            style={{
-              height: "calc(100% - 60px)",
-              overflowX: "auto",
-              overflowY: "auto",
-            }}
-          >
-            <ReactGrid
-              rows={normalizedGridRows}
-              columns={normalizedGridCols}
-              onCellsChanged={handleNormalizedChanges}
-              onFocusLocationChanged={(loc) => setNormalizedFocus(loc)}
-              enableRowSelection
-              enableColumnSelection
-              stickyTopRows={1}
-              stickyLeftColumns={1}
-            />
-          </div>
-        </div>
+                activeColor="#ff6b6b"
+              />
+            </>
+          }
+        />
       )}
     </div>
   );
