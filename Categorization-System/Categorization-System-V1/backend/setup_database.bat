@@ -1,5 +1,5 @@
 @echo off
-echo Setting up PostgreSQL database for Finance Dashboard...
+echo Setting up PostgreSQL database for Finance Data Normalization and Categorization System...
 echo.
 
 echo 1. Download and install PostgreSQL from: https://www.postgresql.org/download/windows/

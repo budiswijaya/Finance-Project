@@ -1,8 +1,9 @@
 #root {
   margin: 0 auto;
   padding: 1rem;
-  text-align: center; /* align content to left instead */
-  color: #ddd;
+  min-height: 100dvh;
+  text-align: left;
+  color: #1f2937;
 }
 
 h3 {
@@ -25,7 +26,7 @@ button {
 
 .file-upload-label {
   padding: 0.5rem 1rem;
-  background: #333;
+  background: #2563eb;
   color: #fff;
   border-radius: 4px;
   cursor: pointer;
@@ -34,7 +35,7 @@ button {
 }
 
 .file-upload-label:hover {
-  background: #444;
+  background: #1d4ed8;
 }
 
 .file-input-wrapper {
@@ -45,7 +46,7 @@ button {
 
 .file-note {
   font-size: 0.8rem;
-  color: #aaa;
+  color: #4b5563;
   text-align: center;
 }
 
@@ -74,7 +75,7 @@ td {
 /* ReactGrid wrapper with card look */
 .grid-wrapper {
   background: #fff;
-  border: 1px solid #ddd;
+  border: 1px solid #d1d5db;
   border-radius: 6px;
   padding: 0.5rem;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
@@ -86,21 +87,21 @@ td {
 /* ReactGrid rows and headers */
 .reactgrid-content {
   font-size: 0.85rem;
-  color: #333;
+  color: #1f2937;
 }
 
 /* Header cells */
 .reactgrid-content .rg-cell.rg-header-cell {
   background: #f7f7f7;
   font-weight: bold;
-  color: #222;
+  color: #111827;
   border-bottom: 1px solid #ddd;
 }
 
 /* Normal cells */
 .reactgrid-content .rg-cell {
   background: #fff;
-  border: 1px solid #eee;
+  border: 1px solid #e5e7eb;
 }
 
 .reactgrid .rg-cell-text {
@@ -116,4 +117,56 @@ td {
 .reactgrid-content .rg-cell.rg-selected {
   outline: 2px solid #1976d2 !important;
   background: #e3f2fd !important;
+}
+
+.admin-panel {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background-color: #ffffff;
+  max-width: 360px;
+  text-align: left;
+}
+
+.admin-section {
+  border-top: 1px solid #e5e7eb;
+  padding-top: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.admin-details > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.admin-muted {
+  color: #4b5563;
+  font-size: 0.85rem;
+}
+
+.category-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.workspace-scroll {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+  padding-bottom: 0.25rem;
+}
+
+.workspace-scroll.initial-state {
+  display: flex;
+  align-items: center;
+}
+
+.category-group-summary {
+  cursor: pointer;
+  font-weight: 600;
+  text-transform: capitalize;
+  text-align: center;
+  list-style-position: inside;
 }

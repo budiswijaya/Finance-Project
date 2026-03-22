@@ -13,19 +13,19 @@ import "@silevis/reactgrid/styles.css";
 interface ParsedData {
   filename: string;
   fileType: "csv" | "excel" | "json" | "text" | "unknown";
-  rows: Record<string, any>[];
+  rows: Array<Record<string, unknown>>;
 }
 
 interface HistoryState {
   originalGridRows: Row[];
   normalizedGridRows: Row[];
-  normalizedRows: any[];
+  normalizedRows: NormalizedRow[];
   normalizedGridCols: Column[];
 }
 
 interface SavedState {
   normalizedGridRows: Row[];
-  normalizedRows: any[];
+  normalizedRows: NormalizedRow[];
   normalizedGridCols: Column[];
   timestamp: number;
 }
@@ -50,8 +50,39 @@ interface GridPanelProps {
   rows: Row[];
   columns: Column[];
   onCellsChanged: (changes: CellChange[]) => void;
-  onFocusLocationChanged: (loc: any) => void;
+  onFocusLocationChanged: (loc: FocusLocation) => void;
   actions: React.ReactNode;
+}
+
+interface CategoryOption {
+  id: number;
+  name: string;
+  icon?: string | null;
+  type: string;
+}
+
+interface CategoriesResponse {
+  categories: CategoryOption[];
+}
+
+interface EditableCategory extends CategoryOption {
+  isDirty?: boolean;
+}
+
+interface CategoryUsageResponse {
+  id: number;
+  name: string;
+  transaction_count: number;
+  keyword_count: number;
+  requires_force: boolean;
+}
+
+// Shape of every row stored in normalizedRows state.
+// Fields are optional because the user may map only a subset of columns.
+interface NormalizedRow {
+  date?: string;
+  note?: string;
+  amount?: number;
 }
 
 // ---------- Constants ----------
@@ -175,7 +206,7 @@ const GridPanel = ({
 
 const getColumnWidth = (
   header: string,
-  rows: Record<string, any>[]
+  rows: Array<Record<string, unknown>>
 ): number => {
   const charWidth = 8;
   const padding = 20;
@@ -192,7 +223,7 @@ const getColumnWidth = (
 const toDisplayText = (value: unknown): string =>
   value === null || value === undefined ? "" : String(value);
 
-const getCellText = (cell: any): string =>
+const getCellText = (cell: unknown): string =>
   cell?.text ?? toDisplayText(cell?.value);
 
 const debugLog = (...args: unknown[]) => {
@@ -204,6 +235,84 @@ const debugLog = (...args: unknown[]) => {
 const formatCurrencyNumber = (num: number): string =>
   new Intl.NumberFormat("id-ID").format(num);
 
+class ApiError extends Error {
+  status: number;
+  detail: unknown;
+
+  constructor(message: string, status: number, detail: unknown) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
+const isApiError = (error: unknown): error is ApiError => error instanceof ApiError;
+
+const formatApiDetail = (detail: unknown): string => {
+  if (typeof detail === "string") {
+    return detail;
+  }
+  if (detail && typeof detail === "object") {
+    const maybeMessage = (detail as { message?: unknown }).message;
+    if (typeof maybeMessage === "string" && maybeMessage.trim()) {
+      return maybeMessage;
+    }
+    return JSON.stringify(detail);
+  }
+  return "Unexpected API error";
+};
+
+async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
+  const response = await fetch(url, options);
+  if (!response.ok) {
+    let message = `HTTP error! status: ${response.status}`;
+    let detail: unknown = null;
+    try {
+      const errorData = await response.json();
+      detail = errorData?.detail ?? errorData;
+      message = formatApiDetail(detail) || message;
+    } catch {
+      // Ignore JSON parse failures and keep the default message.
+    }
+    throw new ApiError(message, response.status, detail);
+  }
+  return response.json() as Promise<T>;
+}
+
+async function fetchCategoryEndpointWithFallback<T>(
+  path: string,
+  options?: RequestInit
+): Promise<T> {
+  const primaryUrl = `${API_BASE_URL}${path}`;
+  const adminUrl = `${API_BASE_URL}/admin${path}`;
+
+  try {
+    return await fetchJson<T>(primaryUrl, options);
+  } catch (primaryError) {
+    const shouldRetryWithAdminPath =
+      isApiError(primaryError) && [404, 405].includes(primaryError.status);
+
+    if (!shouldRetryWithAdminPath) {
+      throw primaryError;
+    }
+
+    try {
+      return await fetchJson<T>(adminUrl, options);
+    } catch (adminError) {
+      const bothMissing =
+        isApiError(adminError) && [404, 405].includes(adminError.status);
+
+      if (bothMissing) {
+        throw new Error(
+          "Category write endpoints are unavailable on the running backend. Please restart Categorization-System-V1 backend/main.py, then retry."
+        );
+      }
+      throw adminError;
+    }
+  }
+}
+
 const parseAmount = (text: string): number => {
   if (!text || typeof text !== 'string') return 0;
 
@@ -212,12 +321,12 @@ const parseAmount = (text: string): number => {
   // Handle parentheses for negative amounts (200.00) -> -200.00
   if (str.startsWith('(') && str.endsWith(')')) {
     const inner = str.slice(1, -1);
-    const num = Number(inner.replace(/[^0-9.\-]/g, ""));
+    const num = Number(inner.replace(/[^0-9.-]/g, ""));
     return num ? -Math.abs(num) : 0;
   }
 
   // Handle regular negative amounts and currency symbols
-  const cleaned = str.replace(/[^0-9.\-\s]/g, "").trim();
+  const cleaned = str.replace(/[^0-9.\s-]/g, "").trim();
   const num = Number(cleaned) || 0;
 
   return num;
@@ -226,7 +335,7 @@ const parseAmount = (text: string): number => {
 const convertGridRowsToNormalizedObjects = (
   gridRows: Row[],
   gridColumns: Column[]
-): any[] => {
+): NormalizedRow[] => {
   const valueColumns = gridColumns.filter(
     (column) => column.columnId !== ROW_INDEX_COLUMN_ID
   );
@@ -234,7 +343,7 @@ const convertGridRowsToNormalizedObjects = (
   return gridRows
     .filter((gridRow) => gridRow.rowId !== HEADER_ROW_ID)
     .map((gridRow) => {
-      const normalizedRow: any = {};
+      const normalizedRow: NormalizedRow = {};
       valueColumns.forEach((column, idx) => {
         const cellIndex = idx + 1; // +1 to skip rowIndex column
         let cellValue: string | number = getCellText(gridRow.cells[cellIndex]);
@@ -243,7 +352,8 @@ const convertGridRowsToNormalizedObjects = (
           cellValue = parseAmount(cellValue);
         }
 
-        normalizedRow[String(column.columnId).toLowerCase()] = cellValue;
+        const normalizedKey = String(column.columnId).toLowerCase() as keyof NormalizedRow;
+        normalizedRow[normalizedKey] = cellValue as never;
       });
 
       return normalizedRow;
@@ -251,7 +361,7 @@ const convertGridRowsToNormalizedObjects = (
 };
 
 const createGridRowsFromSourceData = (
-  sourceRows: Record<string, any>[],
+  sourceRows: Array<Record<string, unknown>>,
   columns: Column[]
 ): Row[] => {
   const headerRow: Row = {
@@ -340,16 +450,7 @@ const useHistory = () => {
     return null;
   }, []);
 
-  const reset = useCallback(() => {
-    historyRef.current = [];
-    indexRef.current = -1;
-    isProcessingRef.current = false;
-  }, []);
-
-  const canUndo = indexRef.current > 0;
-  const canRedo = indexRef.current < historyRef.current.length - 1;
-
-  return { pushState, undo, redo, reset, canUndo, canRedo };
+  return { pushState, undo, redo };
 };
 
 // ---------- Component ----------
@@ -357,7 +458,7 @@ export function NormalizedData() {
   // State
   const [data, setData] = useState<ParsedData | null>(null);
   const [mapping, setMapping] = useState<Record<string, string>>({});
-  const [normalizedRows, setNormalizedRows] = useState<any[]>([]);
+  const [normalizedRows, setNormalizedRows] = useState<NormalizedRow[]>([]);
   const [submitMessage, setSubmitMessage] = useState<string>("");
   const [originalGridCols, setOriginalGridCols] = useState<Column[]>([]);
   const [originalGridRows, setOriginalGridRows] = useState<Row[]>([]);
@@ -366,6 +467,15 @@ export function NormalizedData() {
   const [originalFocus, setOriginalFocus] = useState<FocusLocation | null>(null);
   const [normalizedFocus, setNormalizedFocus] = useState<FocusLocation | null>(null);
   const [isCalculated, setIsCalculated] = useState<boolean>(false);
+  const [editableCategories, setEditableCategories] = useState<EditableCategory[]>([]);
+  const [isCategoryLoading, setIsCategoryLoading] = useState<boolean>(false);
+  const [savingCategoryId, setSavingCategoryId] = useState<number | null>(null);
+  const [deletingCategoryId, setDeletingCategoryId] = useState<number | null>(null);
+  const [isCreatingCategory, setIsCreatingCategory] = useState<boolean>(false);
+  const [newCategoryName, setNewCategoryName] = useState<string>("");
+  const [newCategoryType, setNewCategoryType] = useState<"expense" | "income">("expense");
+  const [categorySearch, setCategorySearch] = useState<string>("");
+  const [categoryMessage, setCategoryMessage] = useState<string>("");
 
   // Reset calculation state when normalized data changes
   useEffect(() => {
@@ -389,6 +499,191 @@ export function NormalizedData() {
     );
     return { count, sum };
   }, [normalizedRows]);
+
+  const groupedCategories = useMemo(() => {
+    const query = categorySearch.trim().toLowerCase();
+    const filtered = editableCategories.filter((category) => {
+      if (!query) return true;
+      return category.name.toLowerCase().includes(query);
+    });
+
+    const expense = filtered
+      .filter((category) => category.type === "expense")
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const income = filtered
+      .filter((category) => category.type === "income")
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    return { expense, income };
+  }, [categorySearch, editableCategories]);
+
+  const refreshCategories = useCallback(async () => {
+    setIsCategoryLoading(true);
+    try {
+      const categoriesResponse = await fetchJson<CategoriesResponse>(`${API_BASE_URL}/categories`);
+      setEditableCategories(categoriesResponse.categories.map((category) => ({ ...category, isDirty: false })));
+      setCategoryMessage("");
+    } catch (error) {
+      console.error("Category refresh error:", error);
+      const message = error instanceof Error ? error.message : "Unknown error";
+      setCategoryMessage(`Category error: ${message}`);
+    } finally {
+      setIsCategoryLoading(false);
+    }
+  }, []);
+
+  const handleCategoryFieldChange = useCallback(
+    (categoryId: number, field: "name" | "type", value: string) => {
+      setEditableCategories((prev) =>
+        prev.map((category) =>
+          category.id === categoryId
+            ? {
+                ...category,
+                [field]: value,
+                isDirty: true,
+              }
+            : category
+        )
+      );
+    },
+    []
+  );
+
+  const handleSaveCategory = useCallback(
+    async (category: EditableCategory) => {
+      const trimmedName = category.name.trim();
+      if (!trimmedName) {
+        setCategoryMessage("Category name cannot be empty.");
+        return;
+      }
+      if (category.type !== "income" && category.type !== "expense") {
+        setCategoryMessage("Category type must be income or expense.");
+        return;
+      }
+
+      setSavingCategoryId(category.id);
+      try {
+        await fetchCategoryEndpointWithFallback<CategoryOption>(`/categories/${category.id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: trimmedName,
+            type: category.type,
+          }),
+        });
+
+        setEditableCategories((prev) =>
+          prev.map((item) =>
+            item.id === category.id
+              ? {
+                  ...item,
+                  name: trimmedName,
+                  isDirty: false,
+                }
+              : item
+          )
+        );
+        setCategoryMessage(`Saved category: ${trimmedName}`);
+      } catch (error) {
+        console.error("Category save error:", error);
+        const message = error instanceof Error ? error.message : "Unknown error";
+        setCategoryMessage(`Category save failed: ${message}`);
+      } finally {
+        setSavingCategoryId(null);
+      }
+    },
+    []
+  );
+
+  const handleCreateCategory = useCallback(async () => {
+    const trimmedName = newCategoryName.trim();
+    if (!trimmedName) {
+      setCategoryMessage("Please type a category name before adding.");
+      return;
+    }
+
+    setIsCreatingCategory(true);
+    try {
+      const created = await fetchCategoryEndpointWithFallback<CategoryOption>("/categories", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: trimmedName,
+          type: newCategoryType,
+        }),
+      });
+
+      setEditableCategories((prev) => [
+        ...prev,
+        {
+          ...created,
+          isDirty: false,
+        },
+      ]);
+      setNewCategoryName("");
+      setCategoryMessage(`Added category: ${created.name}`);
+    } catch (error) {
+      console.error("Category create error:", error);
+      const message = error instanceof Error ? error.message : "Unknown error";
+      setCategoryMessage(`Category create failed: ${message}`);
+    } finally {
+      setIsCreatingCategory(false);
+    }
+  }, [newCategoryName, newCategoryType]);
+
+  const handleDeleteCategory = useCallback(async (category: EditableCategory) => {
+    setDeletingCategoryId(category.id);
+    try {
+      const usage = await fetchCategoryEndpointWithFallback<CategoryUsageResponse>(`/categories/${category.id}/usage`);
+
+      let forceDelete = false;
+      if (usage.transaction_count > 0) {
+        const confirmToken = `DELETE ${category.name}`;
+        const confirmation = window.prompt(
+          `This category has ${usage.transaction_count} transactions and ${usage.keyword_count} keyword rules.\n` +
+          `Deleting it will also delete those transactions.\n\n` +
+          `To confirm, type exactly: ${confirmToken}`
+        );
+        if (confirmation !== confirmToken) {
+          setCategoryMessage("Delete canceled. Confirmation text did not match.");
+          return;
+        }
+        forceDelete = true;
+      } else {
+        const confirmed = window.confirm(
+          `Delete category '${category.name}'? This cannot be undone.`
+        );
+        if (!confirmed) {
+          setCategoryMessage("Delete canceled.");
+          return;
+        }
+      }
+
+      const query = forceDelete ? "?force=true" : "";
+      await fetchCategoryEndpointWithFallback<{ deleted: boolean }>(`/categories/${category.id}${query}`, {
+        method: "DELETE",
+      });
+
+      setEditableCategories((prev) => prev.filter((item) => item.id !== category.id));
+      setCategoryMessage(`Deleted category: ${category.name}`);
+    } catch (error) {
+      console.error("Category delete error:", error);
+      const message = error instanceof Error ? error.message : "Unknown error";
+      setCategoryMessage(`Category delete failed: ${message}`);
+    } finally {
+      setDeletingCategoryId(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshCategories();
+  }, [refreshCategories]);
+
+  const isInitialState = !data;
 
   // ---------- Event Handlers ----------
   const handleUndo = useCallback(() => {
@@ -542,15 +837,15 @@ export function NormalizedData() {
     const sourceDataRows = originalGridRows.filter(
       (row) => row.rowId !== HEADER_ROW_ID
     );
-    const normalizedRowsToAppend: any[] = [];
+    const normalizedRowsToAppend: NormalizedRow[] = [];
     const normalizedGridRowsToAppend: Row[] = [];
 
     // Continue row numbering from existing normalized rows.
     const currentRowCount = normalizedRows.length;
 
     sourceDataRows.forEach((sourceRow, idx) => {
-      const normalizedRow: any = {};
-      const gridCells: any[] = [
+      const normalizedRow: Record<string, string | number> = {};
+      const gridCells: Array<{ type: string; text: string }> = [
         { type: "header", text: String(currentRowCount + idx + 1) },
       ];
 
@@ -666,6 +961,7 @@ export function NormalizedData() {
       originalGridRows,
       normalizedGridRows,
       normalizedRows,
+      normalizedGridCols,
       pushState,
     ]
   );
@@ -707,7 +1003,7 @@ export function NormalizedData() {
     [
       normalizedGridRows,
       normalizedGridCols,
-      convertGridRowsToNormalizedObjects,
+      originalGridRows,
       pushState,
     ]
   );
@@ -734,6 +1030,12 @@ export function NormalizedData() {
   }, [normalizedRows]);
 
   const handleCalculate = useCallback(() => {
+    if (normalizedRows.length === 0) {
+      setSubmitMessage("No data to calculate. Please normalize some data first.");
+      setIsCalculated(false);
+      return;
+    }
+
     // Validate data
     const invalidRows = normalizedRows.filter(row =>
       !row.date || row.amount === undefined || row.amount === null || isNaN(row.amount)
@@ -741,12 +1043,6 @@ export function NormalizedData() {
 
     if (invalidRows.length > 0) {
       setSubmitMessage(`Validation failed: ${invalidRows.length} rows have missing or invalid date/amount fields.`);
-      setIsCalculated(false);
-      return;
-    }
-
-    if (normalizedRows.length === 0) {
-      setSubmitMessage("No data to calculate. Please normalize some data first.");
       setIsCalculated(false);
       return;
     }
@@ -762,7 +1058,7 @@ export function NormalizedData() {
       return;
     }
     try {
-      // Validate data before submission
+      // Re-validate before submission to guard against stale/edited rows after Calculate.
       const invalidRows = normalizedRows.filter(row =>
         !row.date || row.amount === undefined || row.amount === null || isNaN(row.amount)
       );
@@ -810,7 +1106,7 @@ export function NormalizedData() {
         `Successfully added ${result.inserted} transactions with sum amount ${formatCurrencyNumber(sum)}.`
       );
       setIsCalculated(false); // Reset calculation state after successful submission
-      console.log("Submitted normalized rows:", normalizedRows);
+      debugLog("Submitted normalized rows:", normalizedRows);
     } catch (error) {
       console.error("Submit error:", error);
       const message = error instanceof Error ? error.message : "Unknown error";
@@ -944,6 +1240,7 @@ export function NormalizedData() {
     originalFocus,
     normalizedGridRows,
     normalizedRows,
+    normalizedGridCols,
     pushState,
     data,
   ]);
@@ -1032,6 +1329,7 @@ export function NormalizedData() {
     originalFocus,
     normalizedGridRows,
     normalizedRows,
+    normalizedGridCols,
     pushState,
   ]);
 
@@ -1102,7 +1400,6 @@ export function NormalizedData() {
     normalizedFocus,
     normalizedGridCols,
     originalGridRows,
-    convertGridRowsToNormalizedObjects,
     pushState,
   ]);
 
@@ -1193,61 +1490,64 @@ export function NormalizedData() {
     normalizedGridCols,
     normalizedFocus,
     originalGridRows,
-    convertGridRowsToNormalizedObjects,
     pushState,
   ]);
 
   // ---------- Render ----------
   return (
-    <div
-      style={{
-        display: "flex",
-        gap: "2rem",
-        justifyContent: "center",
-        marginTop: "2rem",
-      }}
-    >
-      <title>Data Normalization</title>
-      {/* Original Data Grid */}
-      {data && (
-        <GridPanel
-          title="Original Data"
-          rowCount={data.rows.length}
-          width="800px"
-          flex="0 0 800px"
-          rows={originalGridRows}
-          columns={originalGridCols}
-          onCellsChanged={handleOriginalGridChanges}
-          onFocusLocationChanged={(loc) => setOriginalFocus(loc)}
-          actions={
-            <>
-              <ActionButton
-                label="Delete Row"
-                onClick={handleDeleteOriginalRow}
-                disabled={
-                  !originalFocus ||
-                  originalFocus.rowId === HEADER_ROW_ID ||
-                  !originalFocus.rowId
-                }
-                activeColor="#ff6b6b"
-              />
-              <ActionButton
-                label="Delete Column"
-                onClick={handleDeleteOriginalColumn}
-                disabled={
-                  !originalFocus ||
-                  originalFocus.columnId === ROW_INDEX_COLUMN_ID ||
-                  !originalFocus.columnId
-                }
-                activeColor="#ff6b6b"
-              />
-            </>
-          }
-        />
-      )}
+    <div className={`workspace-scroll${isInitialState ? " initial-state" : ""}`}>
+      <div
+        style={{
+          display: "flex",
+          gap: "2rem",
+          justifyContent: "center",
+          alignItems: isInitialState ? "center" : "flex-start",
+          marginTop: isInitialState ? "0" : "2rem",
+          minHeight: isInitialState ? "calc(100dvh - 4.5rem)" : "auto",
+          width: "max-content",
+          minWidth: "100%",
+        }}
+      >
+        {/* Original Data Grid */}
+        {data && (
+          <GridPanel
+            title="Original Data"
+            rowCount={data.rows.length}
+            width="800px"
+            flex="0 0 800px"
+            rows={originalGridRows}
+            columns={originalGridCols}
+            onCellsChanged={handleOriginalGridChanges}
+            onFocusLocationChanged={(loc) => setOriginalFocus(loc)}
+            actions={
+              <>
+                <ActionButton
+                  label="Delete Row"
+                  onClick={handleDeleteOriginalRow}
+                  disabled={
+                    !originalFocus ||
+                    originalFocus.rowId === HEADER_ROW_ID ||
+                    !originalFocus.rowId
+                  }
+                  activeColor="#ff6b6b"
+                />
+                <ActionButton
+                  label="Delete Column"
+                  onClick={handleDeleteOriginalColumn}
+                  disabled={
+                    !originalFocus ||
+                    originalFocus.columnId === ROW_INDEX_COLUMN_ID ||
+                    !originalFocus.columnId
+                  }
+                  activeColor="#ff6b6b"
+                />
+              </>
+            }
+          />
+        )}
 
       {/* Control Panel */}
-      <div style={{ flex: "0 0 auto", minWidth: "250px" }}>
+      <div style={{ flex: "0 0 auto", minWidth: "300px", textAlign: "center" }}>
         <div className="file-input-wrapper">
           <input
             type="file"
@@ -1262,11 +1562,15 @@ export function NormalizedData() {
         <p className="file-note">Only .xlsx .csv .txt .json files</p>
 
         {data && (
-          <>
-            <h4>Column mapping</h4>
+          <div className="admin-panel" style={{ marginLeft: "auto", marginRight: "auto" }}>
+            <h4 style={{ marginTop: 0, marginBottom: "0.5rem", textAlign: "center" }}>Column Mapping</h4>
+            <p className="admin-muted" style={{ marginTop: 0, marginBottom: "0.75rem", textAlign: "center" }}>
+              Match your file columns to Date, Note, and Amount.
+            </p>
+
             {sourceHeaders.map((header) => (
-              <div key={header} style={{ marginBottom: "0.5rem" }}>
-                <label style={{ marginRight: "0.5rem" }}>{header}</label>
+              <div key={header} style={{ marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <label style={{ minWidth: "96px", textAlign: "left" }}>{header}</label>
                 <select
                   value={mapping[header] || ""}
                   onChange={(e) =>
@@ -1275,6 +1579,7 @@ export function NormalizedData() {
                       [header]: e.target.value,
                     }))
                   }
+                  style={{ flex: 1 }}
                 >
                   <option value="">Select field</option>
                   <option value="Date">Date</option>
@@ -1291,13 +1596,11 @@ export function NormalizedData() {
                 gap: "0.5rem",
                 flexWrap: "wrap",
                 marginTop: "1rem",
+                justifyContent: "center",
               }}
             >
               <button onClick={handleAppendNormalizedData}>Add Data</button>
-              <button
-                onClick={handleDownload}
-                disabled={!normalizedRows.length}
-              >
+              <button onClick={handleDownload} disabled={!normalizedRows.length}>
                 Download
               </button>
               <button onClick={handleCalculate} disabled={!normalizedRows.length}>
@@ -1309,62 +1612,172 @@ export function NormalizedData() {
             </div>
 
             {submitMessage && (
-              <p style={{ marginTop: "0.5rem", fontStyle: "italic" }}>
+              <p className="admin-muted" style={{ marginTop: "0.75rem", textAlign: "center" }}>
                 {submitMessage}
               </p>
             )}
-          </>
+          </div>
         )}
+
+        <div className="admin-panel" style={{ marginLeft: "auto", marginRight: "auto" }}>
+          <h4 style={{ marginTop: 0, marginBottom: "0.5rem", textAlign: "center" }}>Category Manager</h4>
+          <p className="admin-muted" style={{ marginTop: 0, marginBottom: "0.75rem", textAlign: "center" }}>
+            Search, add, edit, and delete categories in one place.
+          </p>
+          <p className="admin-muted" style={{ marginTop: 0, marginBottom: "0.75rem", textAlign: "center" }}>
+            Categories are grouped by type to make long lists easier to manage.
+          </p>
+
+          <div className="category-row">
+            <input
+              type="text"
+              value={categorySearch}
+              onChange={(e) => setCategorySearch(e.target.value)}
+              placeholder="Search category name"
+              style={{ width: "100%" }}
+            />
+          </div>
+
+          <div className="category-row" style={{ marginTop: "0.5rem" }}>
+            <input
+              type="text"
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+              placeholder="New category name"
+              style={{ flex: 1 }}
+            />
+            <select
+              value={newCategoryType}
+              onChange={(e) => setNewCategoryType(e.target.value as "expense" | "income")}
+              style={{ width: "110px" }}
+            >
+              <option value="expense">expense</option>
+              <option value="income">income</option>
+            </select>
+            <button onClick={handleCreateCategory} disabled={isCreatingCategory}>
+              {isCreatingCategory ? "Adding..." : "Add"}
+            </button>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: "0.75rem" }}>
+            <button onClick={refreshCategories} disabled={isCategoryLoading}>
+              {isCategoryLoading ? "Loading categories..." : "Refresh Categories"}
+            </button>
+          </div>
+
+          <div style={{ maxHeight: "300px", overflowY: "auto" }}>
+            {groupedCategories.expense.length === 0 && groupedCategories.income.length === 0 && !isCategoryLoading && (
+              <p className="admin-muted" style={{ textAlign: "center" }}>No categories found.</p>
+            )}
+
+            {(["expense", "income"] as const).map((groupType) => {
+              const groupItems = groupedCategories[groupType];
+              if (!groupItems.length) return null;
+
+              return (
+                <details key={groupType} className="admin-section">
+                  <summary className="category-group-summary">
+                    {groupType} ({groupItems.length})
+                  </summary>
+
+                  <div style={{ textAlign: "left", marginTop: "0.5rem" }}>
+                    {groupItems.map((category) => (
+                      <div key={category.id} className="admin-section" style={{ marginTop: "0.5rem" }}>
+                        <label style={{ display: "block", marginBottom: "0.25rem" }}>Name</label>
+                        <input
+                          type="text"
+                          value={category.name}
+                          onChange={(e) => handleCategoryFieldChange(category.id, "name", e.target.value)}
+                          style={{ width: "100%", marginBottom: "0.4rem" }}
+                        />
+                        <label style={{ display: "block", marginBottom: "0.25rem" }}>Type</label>
+                        <select
+                          value={category.type}
+                          onChange={(e) => handleCategoryFieldChange(category.id, "type", e.target.value)}
+                          style={{ width: "100%", marginBottom: "0.4rem" }}
+                        >
+                          <option value="expense">expense</option>
+                          <option value="income">income</option>
+                        </select>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.35rem" }}>
+                          <span className="admin-muted">ID: {category.id}</span>
+                          <div className="category-row" style={{ justifyContent: "flex-end" }}>
+                            <button
+                              onClick={() => handleSaveCategory(category)}
+                              disabled={!category.isDirty || savingCategoryId === category.id}
+                            >
+                              {savingCategoryId === category.id ? "Saving..." : "Save"}
+                            </button>
+                            <button
+                              onClick={() => handleDeleteCategory(category)}
+                              disabled={deletingCategoryId === category.id}
+                              style={{ backgroundColor: "#fee2e2", borderColor: "#fecaca" }}
+                            >
+                              {deletingCategoryId === category.id ? "Deleting..." : "Delete"}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              );
+            })}
+          </div>
+
+          {categoryMessage && <p className="admin-muted" style={{ marginTop: "0.75rem", textAlign: "center" }}>{categoryMessage}</p>}
+        </div>
       </div>
 
-      {/* Normalized Data Grid */}
-      {data && normalizedGridRows.length > 0 && (
-        <GridPanel
-          title="Normalized Data"
-          rowCount={normalizedRows.length}
-          width="600px"
-          flex="0 0 650px"
-          rows={normalizedGridRows}
-          columns={normalizedGridCols}
-          onCellsChanged={handleNormalizedGridChanges}
-          onFocusLocationChanged={(loc) => setNormalizedFocus(loc)}
-          actions={
-            <>
-              <ActionButton
-                label="Save"
-                onClick={handleSave}
-                disabled={!normalizedRows.length}
-                activeColor="#4CAF50"
-              />
-              <ActionButton
-                label="Load"
-                onClick={handleLoad}
-                activeColor="#2196F3"
-              />
-              <ActionButton
-                label="Delete Row"
-                onClick={handleDeleteNormalizedRow}
-                disabled={
-                  !normalizedFocus ||
-                  normalizedFocus.rowId === HEADER_ROW_ID ||
-                  !normalizedFocus.rowId
-                }
-                activeColor="#ff6b6b"
-              />
-              <ActionButton
-                label="Delete Column"
-                onClick={handleDeleteNormalizedColumn}
-                disabled={
-                  !normalizedFocus ||
-                  normalizedFocus.columnId === ROW_INDEX_COLUMN_ID ||
-                  !normalizedFocus.columnId
-                }
-                activeColor="#ff6b6b"
-              />
-            </>
-          }
-        />
-      )}
+        {/* Normalized Data Grid */}
+        {data && normalizedGridRows.length > 0 && (
+          <GridPanel
+            title="Normalized Data"
+            rowCount={normalizedRows.length}
+            width="600px"
+            flex="0 0 650px"
+            rows={normalizedGridRows}
+            columns={normalizedGridCols}
+            onCellsChanged={handleNormalizedGridChanges}
+            onFocusLocationChanged={(loc) => setNormalizedFocus(loc)}
+            actions={
+              <>
+                <ActionButton
+                  label="Save"
+                  onClick={handleSave}
+                  disabled={!normalizedRows.length}
+                  activeColor="#4CAF50"
+                />
+                <ActionButton
+                  label="Load"
+                  onClick={handleLoad}
+                  activeColor="#2196F3"
+                />
+                <ActionButton
+                  label="Delete Row"
+                  onClick={handleDeleteNormalizedRow}
+                  disabled={
+                    !normalizedFocus ||
+                    normalizedFocus.rowId === HEADER_ROW_ID ||
+                    !normalizedFocus.rowId
+                  }
+                  activeColor="#ff6b6b"
+                />
+                <ActionButton
+                  label="Delete Column"
+                  onClick={handleDeleteNormalizedColumn}
+                  disabled={
+                    !normalizedFocus ||
+                    normalizedFocus.columnId === ROW_INDEX_COLUMN_ID ||
+                    !normalizedFocus.columnId
+                  }
+                  activeColor="#ff6b6b"
+                />
+              </>
+            }
+          />
+        )}
+      </div>
     </div>
   );
 }

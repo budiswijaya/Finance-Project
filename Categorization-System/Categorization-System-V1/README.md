@@ -1,4 +1,6 @@
-## Finance Dashboard Setup
+## Finance Data Normalization and Categorization System Setup
+
+This repository focuses on transaction data normalization and rule-based categorization, with a dashboard UI as the operational interface.
 
 ### Prerequisites
 - Node.js (v18 or higher)
@@ -50,3 +52,21 @@
    ```
 
 The application will be available at `http://localhost:5173` (frontend) and `http://localhost:8003` (backend).
+
+### Cleanup
+
+Use this to remove generated files safely:
+
+```bash
+cd /d/Github/Finance-Project/Categorization-System/Categorization-System-V1
+rm -rf dist __pycache__
+find . -type f \( -name "*.pyc" -o -name "*.pyo" \) -delete
+```
+
+Optional deep cleanup (frees more space, but requires reinstall before running frontend):
+
+```bash
+cd /d/Github/Finance-Project/Categorization-System/Categorization-System-V1
+rm -rf node_modules
+npm install
+```
