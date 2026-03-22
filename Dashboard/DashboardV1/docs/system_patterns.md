@@ -54,13 +54,13 @@ File Upload
 - `parse_date()` runs on all parsed rows — detects date-like strings via regex and normalizes to `YYYY-MM-DD`
 
 ### Category Auto-Assignment
-- `/transactions/import` refuses submissions unless both `income` and `expense` category types exist in DB
 - `determine_category_id()` uses a three-phase strategy:
-  1. **Keyword matching (primary)**: Loads all `category_keywords` rules filtered by transaction type; matches keywords in transaction note with deterministic priority ordering (lower priority number wins; category ID breaks ties)
-  2. **Category name matching (fallback)**: Falls back to substring matching of category names for backward compatibility
+  1. **Keyword matching (primary)**: Loads all active `category_keywords` rules across both types; matches keywords in transaction note with deterministic priority ordering (lower priority number wins; category ID breaks ties)
+  2. **Category name matching (fallback)**: Falls back to substring matching of category names across both types for backward compatibility
   3. **Error with guidance (final)**: Lists all available keywords and category names user can use
 - If no match found, raises HTTP 400 asking user to include a keyword or category name in the note
-- Transaction type (income/expense) is inferred from amount sign; only keywords for that type are considered
+- Amount sign does not control classification scope; positive and negative amounts use the same global rule set
+- Import endpoint supports optional debug mode (`POST /transactions/import?debug=true`) that returns classification metadata while default response remains unchanged
 
 ### Keyword Matching Strategy
 - **Data loading**: At request time, keywords are loaded once per import with a LEFT JOIN between categories and category_keywords
@@ -68,12 +68,27 @@ File Upload
   - Primary: Keyword with lower priority number wins (priority 1 > priority 2)
   - Secondary: If same priority across categories, lower category ID wins
   - Example: note="cafe grab lunch" with {cafe→Food p:1, grab→Transport p:2} → Food & Dining (priority 1 wins)
-- **Matching rules**: Substring matching (`keyword in note_lower`); no word boundaries yet (Phase 2 enhancement)
+- **Matching rules**: Mixed rule types are supported per keyword (`substring`, `word_boundary`, `exact`)
+- **Soft-delete rules**: Inactive rules (`is_active=false`) are excluded from runtime classification
 - **Seed data**: Uses dynamic category lookup by name instead of hard-coded IDs (stable across schema changes)
 - **Uniqueness**: `UNIQUE(category_id, keyword)` constraint prevents duplicate keyword/category pairs
 
+### Rule Management API
+- Keyword lifecycle is managed via backend endpoints:
+  - `GET /category-keywords`
+  - `POST /category-keywords`
+  - `PUT /category-keywords/{keyword_id}`
+  - `DELETE /category-keywords/{keyword_id}` (soft delete)
+  - `POST /category-keywords/validate-note`
+  - `GET /category-keywords/coverage`
+- `/category-keywords/validate-note` reuses production classifier logic to avoid drift between diagnostics and import behavior
+
+### Classification Observability
+- Classification outcomes are persisted to `transaction_classification_log` when the table exists
+- Log rows include phase, resolution path, matched keyword, and hashed note to support later analytics and rule tuning
+
 ### Database
-- Three tables: `categories (id, name, icon, type, created_at)`, `transactions (id, date, amount, note, category_id, created_at)`, and `category_keywords (id, category_id, keyword, priority, created_at)`
+- Four tables: `categories (id, name, icon, type, created_at)`, `transactions (id, date, amount, note, category_id, created_at)`, `category_keywords (id, category_id, keyword, priority, match_type, is_active, created_at, updated_at, created_by)`, and `transaction_classification_log`
 - `category_id` is a required FK — every transaction must have a category
 - `category_keywords.category_id` cascades on delete, so keyword rules are treated as dependent metadata for a category
 - `category_keywords` is queried at runtime during transaction import with LEFT JOIN to support categories with no keywords

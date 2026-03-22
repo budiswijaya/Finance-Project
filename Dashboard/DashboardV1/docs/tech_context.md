@@ -36,11 +36,24 @@
 
 - PostgreSQL
 - Schema defined in `backend/database_setup.sql`
-- Three tables: `categories`, `transactions`, `category_keywords`
+- Four tables: `categories`, `transactions`, `category_keywords`, `transaction_classification_log`
 - Sample categories seeded in SQL script
 - Sample keyword rules are seeded with dynamic category name lookup (no hard-coded IDs)
-- Keyword rules are queried and used during transaction import for classification (Phase 1)
+- Keyword rules support mixed matching (`substring`, `word_boundary`, `exact`) with soft-delete (`is_active`)
+- Classification outcomes can be logged to `transaction_classification_log` for observability and later analytics
 - Classification logic is isolated in `backend/category_classifier.py` and called by `backend/main.py`
+
+## API Additions
+
+- Keyword management endpoints:
+	- `GET /category-keywords`
+	- `POST /category-keywords`
+	- `PUT /category-keywords/{keyword_id}`
+	- `DELETE /category-keywords/{keyword_id}` (soft delete)
+	- `POST /category-keywords/validate-note`
+	- `GET /category-keywords/coverage`
+- Existing import endpoint supports optional debug metadata:
+	- `POST /transactions/import?debug=true`
 
 ## Development Setup
 

@@ -9,15 +9,19 @@
 
 - Test file: `test_category_keywords.py`
 - Scope: imports production classifier (`backend/category_classifier.py`) and validates runtime behavior.
-- Current suite size: 5 unit tests.
+- Current suite size: 9 unit tests.
 
 ### Covered Behaviors
 
 1. Keyword priority resolution
 2. Deterministic tie-break by category ID
-3. Category-name fallback remains type-scoped
-4. Income-only keywords do not classify expense rows
-5. Error guidance is type-scoped
+3. Word-boundary matching and embedded-substring rejection
+4. Exact matching behavior
+5. Category-name fallback across all categories
+6. Income keywords can classify negative amounts
+7. Expense keywords can classify positive amounts
+8. Error guidance includes global keyword/category options
+9. Metadata path reporting for fallback classification
 
 ### Run Command
 
@@ -41,10 +45,17 @@ d:/Github/.venv/Scripts/python.exe test_category_keywords.py
 - `POST /parse`
 - `GET /categories/types`
 - `POST /transactions/import`
+- `POST /transactions/import?debug=true`
+- `GET /category-keywords`
+- `POST /category-keywords`
+- `PUT /category-keywords/{keyword_id}`
+- `DELETE /category-keywords/{keyword_id}`
+- `POST /category-keywords/validate-note`
+- `GET /category-keywords/coverage`
 
 ## Regression Focus Areas
 
-- Type-safe category assignment (`income` vs `expense`)
+- Deterministic category assignment regardless of amount sign
 - Keyword priority and deterministic tie-break behavior
 - Category-name fallback after keyword miss
 - Date normalization to `YYYY-MM-DD`
