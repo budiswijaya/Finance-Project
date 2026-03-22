@@ -1,22 +1,25 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import pandas as pd
 import json
 import csv
 import io
 from datetime import datetime
 import re
+from collections import Counter
 
 import psycopg2
 
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 from category_classifier import determine_category_id
+from classification_observability import build_log_payload
 
 # Load environment variables
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 conn = psycopg2.connect(
     host=os.getenv("DB_HOST"),
@@ -70,102 +73,622 @@ async def get_category_types():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch category types: {str(e)}")
 
+
+def normalize_keyword(value: str) -> str:
+    """Normalize keyword input for matching and duplicate checks."""
+    return value.lower().strip()
+
+
+def validate_match_type(value: str) -> str:
+    """Validate one of the supported keyword match strategies."""
+    allowed = {"substring", "word_boundary", "exact"}
+    if value not in allowed:
+        raise HTTPException(status_code=422, detail="match_type must be one of: substring, word_boundary, exact")
+    return value
+
+
+def get_table_columns(cursor, table_name: str) -> set:
+    """Return existing column names for a table in public schema."""
+    cursor.execute(
+        """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = %s
+        """,
+        (table_name,),
+    )
+    return {row[0] for row in cursor.fetchall()}
+
+
+def load_category_context(cursor):
+    """Load categories and active keyword rules into per-type in-memory maps."""
+    keyword_columns = get_table_columns(cursor, "category_keywords")
+    has_match_type = "match_type" in keyword_columns
+    has_is_active = "is_active" in keyword_columns
+
+    match_type_select = "COALESCE(ck.match_type, 'substring')" if has_match_type else "'substring'"
+    active_filter = "AND COALESCE(ck.is_active, TRUE) = TRUE" if has_is_active else ""
+
+    cursor.execute(
+        f"""
+        SELECT c.id, c.name, c.type,
+               COALESCE(
+                   json_agg(
+                       json_build_object(
+                           'keyword', ck.keyword,
+                           'priority', ck.priority,
+                           'match_type', {match_type_select}
+                       )
+                       ORDER BY ck.priority ASC, ck.id ASC
+                   ) FILTER (WHERE ck.id IS NOT NULL),
+                   '[]'
+               ) as keywords
+        FROM categories c
+        LEFT JOIN category_keywords ck
+               ON c.id = ck.category_id
+              {active_filter}
+        GROUP BY c.id, c.name, c.type
+        ORDER BY c.name
+        """
+    )
+
+    categories = cursor.fetchall()
+    keywords_by_type = {"income": {}, "expense": {}}
+    category_names_by_type = {"income": {}, "expense": {}}
+    available_category_names_by_type = {"income": [], "expense": []}
+    category_lookup = {}
+
+    for cat_id, cat_name, cat_type, keywords_json in categories:
+        if cat_type not in keywords_by_type:
+            continue
+
+        normalized_name = cat_name.lower().strip()
+        category_names_by_type[cat_type][normalized_name] = cat_id
+        available_category_names_by_type[cat_type].append(cat_name)
+        category_lookup[cat_id] = {"name": cat_name, "type": cat_type}
+
+        cleaned_keywords = []
+        for kw in keywords_json or []:
+            keyword = kw.get("keyword") if isinstance(kw, dict) else None
+            priority = kw.get("priority") if isinstance(kw, dict) else None
+            match_type = kw.get("match_type") if isinstance(kw, dict) else "substring"
+            if isinstance(keyword, str) and keyword.strip():
+                cleaned_keywords.append(
+                    (
+                        normalize_keyword(keyword),
+                        priority if isinstance(priority, int) else 1,
+                        validate_match_type(match_type if isinstance(match_type, str) else "substring"),
+                    )
+                )
+
+        if cleaned_keywords:
+            keywords_by_type[cat_type][cat_id] = cleaned_keywords
+
+    return keywords_by_type, category_names_by_type, available_category_names_by_type, category_lookup
+
+
+def is_classification_log_available(cursor) -> bool:
+    """Detect whether Phase 2 observability table exists."""
+    cursor.execute("SELECT to_regclass('public.transaction_classification_log')")
+    return cursor.fetchone()[0] is not None
+
+
+def log_classification(cursor, transaction_id: int, payload: Dict[str, Any]) -> None:
+    """Insert one observability row for classifier outcomes."""
+    cursor.execute(
+        """
+        INSERT INTO transaction_classification_log (
+            transaction_id,
+            note_hash,
+            amount,
+            transaction_type,
+            phase_matched,
+            resolution_path,
+            matched_keyword,
+            matched_category_id,
+            matched_category_name,
+            match_type,
+            priority,
+            tie_break_info,
+            error_message,
+            created_at
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+        """,
+        (
+            transaction_id,
+            payload.get("note_hash"),
+            payload.get("amount"),
+            payload.get("transaction_type"),
+            payload.get("phase_matched"),
+            payload.get("resolution_path"),
+            payload.get("matched_keyword"),
+            payload.get("matched_category_id"),
+            payload.get("matched_category_name"),
+            payload.get("match_type"),
+            payload.get("priority"),
+            payload.get("tie_break_info"),
+            payload.get("error_message"),
+        ),
+    )
+
+@app.get("/category-keywords")
+async def get_category_keywords(
+    category_id: Optional[int] = Query(default=None),
+    type: Optional[str] = Query(default=None),
+    active: Optional[bool] = Query(default=True),
+    match_type: Optional[str] = Query(default=None),
+):
+    """List keyword rules with optional filters."""
+    try:
+        if type is not None and type not in {"income", "expense"}:
+            raise HTTPException(status_code=422, detail="type must be either income or expense")
+        if match_type is not None:
+            validate_match_type(match_type)
+
+        cursor = conn.cursor()
+        where_clauses = []
+        params = []
+
+        if category_id is not None:
+            where_clauses.append("ck.category_id = %s")
+            params.append(category_id)
+        if type is not None:
+            where_clauses.append("c.type = %s")
+            params.append(type)
+        if active is not None:
+            where_clauses.append("COALESCE(ck.is_active, TRUE) = %s")
+            params.append(active)
+        if match_type is not None:
+            where_clauses.append("COALESCE(ck.match_type, 'substring') = %s")
+            params.append(match_type)
+
+        query = """
+            SELECT ck.id, ck.category_id, c.name, c.type, ck.keyword, ck.priority,
+                   COALESCE(ck.match_type, 'substring') AS match_type,
+                   COALESCE(ck.is_active, TRUE) AS is_active,
+                   ck.created_by, ck.created_at, ck.updated_at
+            FROM category_keywords ck
+            JOIN categories c ON c.id = ck.category_id
+        """
+        if where_clauses:
+            query += " WHERE " + " AND ".join(where_clauses)
+        query += " ORDER BY c.name, ck.priority ASC, ck.id ASC"
+
+        cursor.execute(query, tuple(params))
+        rows = cursor.fetchall()
+
+        keywords = [
+            {
+                "id": row[0],
+                "category_id": row[1],
+                "category_name": row[2],
+                "type": row[3],
+                "keyword": row[4],
+                "priority": row[5],
+                "match_type": row[6],
+                "is_active": row[7],
+                "created_by": row[8],
+                "created_at": row[9],
+                "updated_at": row[10],
+            }
+            for row in rows
+        ]
+        return {"keywords": keywords, "total": len(keywords)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch category keywords: {str(e)}")
+
+
+@app.post("/category-keywords")
+async def create_category_keyword(payload: Dict[str, Any]):
+    """Create one keyword rule for a category."""
+    try:
+        category_id = payload.get("category_id")
+        keyword = payload.get("keyword")
+        priority = payload.get("priority", 1)
+        match_type = payload.get("match_type", "substring")
+        created_by = payload.get("created_by")
+
+        if not isinstance(category_id, int):
+            raise HTTPException(status_code=422, detail="category_id is required and must be an integer")
+        if not isinstance(keyword, str) or not keyword.strip():
+            raise HTTPException(status_code=422, detail="keyword is required")
+        if not isinstance(priority, int) or priority < 1:
+            raise HTTPException(status_code=422, detail="priority must be a positive integer")
+        if not isinstance(match_type, str):
+            raise HTTPException(status_code=422, detail="match_type must be a string")
+        validate_match_type(match_type)
+
+        normalized_keyword = normalize_keyword(keyword)
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT id FROM categories WHERE id = %s", (category_id,))
+        if cursor.fetchone() is None:
+            raise HTTPException(status_code=400, detail="Category does not exist")
+
+        cursor.execute(
+            """
+            SELECT id
+            FROM category_keywords
+            WHERE category_id = %s
+              AND LOWER(TRIM(keyword)) = %s
+              AND COALESCE(is_active, TRUE) = TRUE
+            """,
+            (category_id, normalized_keyword),
+        )
+        if cursor.fetchone() is not None:
+            raise HTTPException(status_code=409, detail=f"Keyword '{normalized_keyword}' already exists for this category")
+
+        cursor.execute(
+            """
+            INSERT INTO category_keywords (category_id, keyword, priority, match_type, is_active, created_by, updated_at)
+            VALUES (%s, %s, %s, %s, TRUE, %s, NOW())
+            RETURNING id, category_id, keyword, priority, match_type, is_active, created_by, created_at, updated_at
+            """,
+            (category_id, normalized_keyword, priority, match_type, created_by),
+        )
+        row = cursor.fetchone()
+        conn.commit()
+
+        return {
+            "id": row[0],
+            "category_id": row[1],
+            "keyword": row[2],
+            "priority": row[3],
+            "match_type": row[4],
+            "is_active": row[5],
+            "created_by": row[6],
+            "created_at": row[7],
+            "updated_at": row[8],
+        }
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create category keyword: {str(e)}")
+
+
+@app.put("/category-keywords/{keyword_id}")
+async def update_category_keyword(keyword_id: int, payload: Dict[str, Any]):
+    """Update an existing keyword rule."""
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT id, category_id, keyword, priority, COALESCE(match_type, 'substring'), COALESCE(is_active, TRUE)
+            FROM category_keywords
+            WHERE id = %s
+            """,
+            (keyword_id,),
+        )
+        existing = cursor.fetchone()
+        if existing is None:
+            raise HTTPException(status_code=404, detail="Keyword rule not found")
+
+        category_id = existing[1]
+        updates = []
+        values = []
+
+        if "keyword" in payload:
+            if not isinstance(payload["keyword"], str) or not payload["keyword"].strip():
+                raise HTTPException(status_code=422, detail="keyword must be a non-empty string")
+            normalized_keyword = normalize_keyword(payload["keyword"])
+            cursor.execute(
+                """
+                SELECT id
+                FROM category_keywords
+                WHERE category_id = %s
+                  AND LOWER(TRIM(keyword)) = %s
+                  AND id <> %s
+                  AND COALESCE(is_active, TRUE) = TRUE
+                """,
+                (category_id, normalized_keyword, keyword_id),
+            )
+            if cursor.fetchone() is not None:
+                raise HTTPException(status_code=409, detail=f"Keyword '{normalized_keyword}' already exists for this category")
+            updates.append("keyword = %s")
+            values.append(normalized_keyword)
+
+        if "priority" in payload:
+            if not isinstance(payload["priority"], int) or payload["priority"] < 1:
+                raise HTTPException(status_code=422, detail="priority must be a positive integer")
+            updates.append("priority = %s")
+            values.append(payload["priority"])
+
+        if "match_type" in payload:
+            if not isinstance(payload["match_type"], str):
+                raise HTTPException(status_code=422, detail="match_type must be a string")
+            updates.append("match_type = %s")
+            values.append(validate_match_type(payload["match_type"]))
+
+        if "is_active" in payload:
+            if not isinstance(payload["is_active"], bool):
+                raise HTTPException(status_code=422, detail="is_active must be a boolean")
+            updates.append("is_active = %s")
+            values.append(payload["is_active"])
+
+        if not updates:
+            raise HTTPException(status_code=400, detail="No valid fields provided for update")
+
+        updates.append("updated_at = NOW()")
+        values.append(keyword_id)
+
+        cursor.execute(
+            f"""
+            UPDATE category_keywords
+            SET {', '.join(updates)}
+            WHERE id = %s
+            RETURNING id, category_id, keyword, priority, COALESCE(match_type, 'substring'),
+                      COALESCE(is_active, TRUE), created_by, created_at, updated_at
+            """,
+            tuple(values),
+        )
+        row = cursor.fetchone()
+        conn.commit()
+
+        return {
+            "id": row[0],
+            "category_id": row[1],
+            "keyword": row[2],
+            "priority": row[3],
+            "match_type": row[4],
+            "is_active": row[5],
+            "created_by": row[6],
+            "created_at": row[7],
+            "updated_at": row[8],
+        }
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update category keyword: {str(e)}")
+
+
+@app.delete("/category-keywords/{keyword_id}", status_code=204)
+async def delete_category_keyword(keyword_id: int):
+    """Soft-delete one keyword rule by marking it inactive."""
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            UPDATE category_keywords
+            SET is_active = FALSE,
+                updated_at = NOW()
+            WHERE id = %s
+            RETURNING id
+            """,
+            (keyword_id,),
+        )
+        if cursor.fetchone() is None:
+            raise HTTPException(status_code=404, detail="Keyword rule not found")
+
+        conn.commit()
+        return Response(status_code=204)
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete category keyword: {str(e)}")
+
+
+@app.post("/category-keywords/validate-note")
+async def validate_category_note(payload: Dict[str, Any]):
+    """Classify a note without inserting a transaction."""
+    try:
+        note = payload.get("note", "")
+        amount = payload.get("amount")
+
+        if amount is None or not isinstance(amount, (int, float)):
+            raise HTTPException(status_code=422, detail="amount is required and must be a number")
+        if not isinstance(note, str):
+            raise HTTPException(status_code=422, detail="note must be a string")
+
+        cursor = conn.cursor()
+        keywords_by_type, category_names_by_type, available_category_names_by_type, category_lookup = load_category_context(cursor)
+        category_id, metadata = determine_category_id(
+            amount=amount,
+            note=note,
+            keywords_by_type=keywords_by_type,
+            category_names_by_type=category_names_by_type,
+            available_category_names_by_type=available_category_names_by_type,
+            return_metadata=True,
+        )
+
+        if category_id is None:
+            return {"classification_scope": "global", "classification": metadata}
+
+        return {
+            "classification_scope": "global",
+            "classification": {
+                "category_id": category_id,
+                "category_name": category_lookup.get(category_id, {}).get("name"),
+                "phase": metadata.get("phase"),
+                "resolution_path": metadata.get("resolution_path"),
+                "matched_keyword": metadata.get("matched_keyword"),
+                "match_type": metadata.get("match_type"),
+                "priority": metadata.get("priority"),
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to validate note: {str(e)}")
+
+
+@app.get("/category-keywords/coverage")
+async def get_category_keyword_coverage(type: Optional[str] = Query(default=None)):
+    """Return active keyword coverage summary by category."""
+    try:
+        if type is not None and type not in {"income", "expense"}:
+            raise HTTPException(status_code=422, detail="type must be either income or expense")
+
+        cursor = conn.cursor()
+        where_clause = ""
+        params = []
+        if type is not None:
+            where_clause = "WHERE c.type = %s"
+            params.append(type)
+
+        cursor.execute(
+            f"""
+            SELECT c.id, c.name, c.type,
+                   COUNT(ck.id) FILTER (WHERE COALESCE(ck.is_active, TRUE) = TRUE) AS active_keyword_count,
+                   COALESCE(
+                       json_agg(
+                           json_build_object(
+                               'keyword', ck.keyword,
+                               'priority', ck.priority,
+                               'match_type', COALESCE(ck.match_type, 'substring')
+                           )
+                           ORDER BY ck.priority ASC, ck.id ASC
+                       ) FILTER (WHERE ck.id IS NOT NULL AND COALESCE(ck.is_active, TRUE) = TRUE),
+                       '[]'
+                   ) AS keywords
+            FROM categories c
+            LEFT JOIN category_keywords ck ON c.id = ck.category_id
+            {where_clause}
+            GROUP BY c.id, c.name, c.type
+            ORDER BY c.name
+            """,
+            tuple(params),
+        )
+        rows = cursor.fetchall()
+
+        categories = []
+        categories_without_rules = []
+        for row in rows:
+            keywords = row[4] or []
+            priority_distribution = Counter(str(k.get("priority", 1)) for k in keywords)
+            match_type_distribution = Counter(k.get("match_type", "substring") for k in keywords)
+
+            category_payload = {
+                "id": row[0],
+                "name": row[1],
+                "type": row[2],
+                "active_keyword_count": row[3],
+                "keywords": [k.get("keyword") for k in keywords if isinstance(k.get("keyword"), str)],
+                "priority_distribution": dict(priority_distribution),
+                "match_type_distribution": {
+                    "substring": match_type_distribution.get("substring", 0),
+                    "word_boundary": match_type_distribution.get("word_boundary", 0),
+                    "exact": match_type_distribution.get("exact", 0),
+                },
+            }
+            categories.append(category_payload)
+            if row[3] == 0:
+                categories_without_rules.append({"id": row[0], "name": row[1], "type": row[2]})
+
+        categories_with_rules = len([c for c in categories if c["active_keyword_count"] > 0])
+        total_rules = sum(c["active_keyword_count"] for c in categories)
+
+        return {
+            "categories": categories,
+            "summary": {
+                "total_categories": len(categories),
+                "categories_with_rules": categories_with_rules,
+                "categories_without_rules": len(categories) - categories_with_rules,
+                "total_active_rules": total_rules,
+            },
+            "categories_without_rules": categories_without_rules,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get keyword coverage: {str(e)}")
+
+
 @app.post("/transactions/import")
-async def import_transactions(rows: List[Dict[str, Any]]):
-    """Import transactions with validation"""
+async def import_transactions(rows: List[Dict[str, Any]], debug: bool = Query(default=False)):
+    """Import transactions with deterministic category assignment."""
     try:
         cursor = conn.cursor()
 
-        # First check if we have categories for income and expense types
-        cursor.execute("SELECT DISTINCT type FROM categories WHERE type IN ('income', 'expense')")
-        existing_types = [row[0] for row in cursor.fetchall()]
-
-        if 'income' not in existing_types or 'expense' not in existing_types:
+        cursor.execute("SELECT COUNT(*) FROM categories")
+        category_count = cursor.fetchone()[0]
+        if category_count == 0:
             raise HTTPException(
                 status_code=400,
-                detail="You should define category types that do not exist in database first to submit data. Missing: " +
-                ", ".join([t for t in ['income', 'expense'] if t not in existing_types])
+                detail="You should define categories in database first to submit data.",
             )
 
-        # Get all categories with their keyword rules for automatic assignment
-        # Uses LEFT JOIN to include categories even if they have no keywords
-        cursor.execute("""
-            SELECT c.id, c.name, c.type, 
-                   COALESCE(json_agg(json_build_object(
-                       'keyword', ck.keyword, 
-                       'priority', ck.priority
-                   ) ORDER BY ck.priority ASC, ck.id ASC), '[]') as keywords
-            FROM categories c
-            LEFT JOIN category_keywords ck ON c.id = ck.category_id
-            GROUP BY c.id, c.name, c.type
-            ORDER BY c.name
-        """)
-        categories = cursor.fetchall()
-
-        # Build per-type lookup dictionaries to preserve income/expense correctness.
-        keywords_by_type = {'income': {}, 'expense': {}}
-        category_names_by_type = {'income': {}, 'expense': {}}
-        available_category_names_by_type = {'income': [], 'expense': []}
-
-        for cat_id, cat_name, cat_type, keywords_json in categories:
-            if cat_type not in keywords_by_type:
-                continue
-
-            normalized_name = cat_name.lower().strip()
-            category_names_by_type[cat_type][normalized_name] = cat_id
-            available_category_names_by_type[cat_type].append(cat_name)
-
-            if not keywords_json:
-                continue
-
-            cleaned_keywords = []
-            for kw in keywords_json:
-                keyword = kw.get('keyword') if isinstance(kw, dict) else None
-                priority = kw.get('priority') if isinstance(kw, dict) else None
-                if isinstance(keyword, str) and keyword.strip():
-                    cleaned_keywords.append((keyword.lower().strip(), priority if isinstance(priority, int) else 1))
-
-            if cleaned_keywords:
-                keywords_by_type[cat_type][cat_id] = cleaned_keywords
+        keywords_by_type, category_names_by_type, available_category_names_by_type, category_lookup = load_category_context(cursor)
+        logging_enabled = is_classification_log_available(cursor)
 
         inserted_count = 0
+        classifications = []
+
         for r in rows:
-            # Validate required fields
             if not r.get("date"):
                 raise HTTPException(status_code=400, detail=f"Date is required for transaction: {r}")
-            if not r.get("amount") or not isinstance(r.get("amount"), (int, float)):
+
+            amount = r.get("amount")
+            if amount is None or not isinstance(amount, (int, float)):
                 raise HTTPException(status_code=400, detail=f"Valid amount is required for transaction: {r}")
 
-            # Use note instead of description
             note = r.get("note") or r.get("description") or ""
-
-            # Automatically determine category_id
-            category_id = determine_category_id(
-                amount=r["amount"],
+            category_id, metadata = determine_category_id(
+                amount=amount,
                 note=note,
                 keywords_by_type=keywords_by_type,
                 category_names_by_type=category_names_by_type,
                 available_category_names_by_type=available_category_names_by_type,
+                return_metadata=True,
             )
+
+            if category_id is None:
+                raise HTTPException(status_code=400, detail=metadata.get("error_message"))
 
             cursor.execute(
                 """
                 INSERT INTO transactions (date, amount, note, category_id, created_at)
                 VALUES (%s, %s, %s, %s, NOW())
+                RETURNING id
                 """,
-                (
-                    r["date"],
-                    r["amount"],
-                    note,
-                    category_id
-                )
+                (r["date"], amount, note, category_id),
             )
+            transaction_id = cursor.fetchone()[0]
             inserted_count += 1
 
+            category_name = category_lookup.get(category_id, {}).get("name")
+            transaction_type = "income" if amount > 0 else "expense"
+
+            if logging_enabled:
+                payload = build_log_payload(
+                    note=note,
+                    amount=amount,
+                    transaction_type=transaction_type,
+                    metadata=metadata,
+                    category_id=category_id,
+                    category_name=category_name,
+                )
+                log_classification(cursor, transaction_id, payload)
+
+            if debug:
+                classifications.append(
+                    {
+                        "note": note,
+                        "amount": amount,
+                        "category_id": category_id,
+                        "category_name": category_name,
+                        "phase": metadata.get("phase"),
+                        "resolution_path": metadata.get("resolution_path"),
+                        "matched_keyword": metadata.get("matched_keyword"),
+                        "match_type": metadata.get("match_type"),
+                        "priority": metadata.get("priority"),
+                    }
+                )
+
         conn.commit()
+        if debug:
+            return {"inserted": inserted_count, "classifications": classifications}
         return {"inserted": inserted_count}
 
     except HTTPException:
+        conn.rollback()
         raise
     except Exception as e:
         conn.rollback()
