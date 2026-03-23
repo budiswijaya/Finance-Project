@@ -19,13 +19,3 @@ A foundation for future dashboards, persistence, and backend integration.
 This project is part of my portfolio because it reflects the core of my learning journey—not just “coding for the sake of coding,” but understanding how data flows, how to structure normalization logic, and how to prepare for scalable features such as dashboards, Excel integration, and database persistence.
 
 <img src= https://github.com/budiswijaya/Finance-Project/blob/main/Data-Normalization/00.png>
-<img src= https://github.com/budiswijaya/Finance-Project/blob/main/Data-Normalization/0.png>
-There will be upcoming dashboard web.
-This below will be the upcoming overall personal/company dashboard with import Master_Template feature that have data whole stored in the dashboard
-<img src= https://github.com/budiswijaya/Finance-Project/blob/main/Data-Normalization/1.png>
-<img src= https://github.com/budiswijaya/Finance-Project/blob/main/Data-Normalization/2.png>
-<img src= https://github.com/budiswijaya/Finance-Project/blob/main/Data-Normalization/3.png>
-<img src= https://github.com/budiswijaya/Finance-Project/blob/main/Data-Normalization/4.png>
-<img src= https://github.com/budiswijaya/Finance-Project/blob/main/Data-Normalization/5.png>
-<img src= https://github.com/budiswijaya/Finance-Project/blob/main/Data-Normalization/6.png>
-<img src= https://github.com/budiswijaya/Finance-Project/blob/main/Data-Normalization/7.png>
