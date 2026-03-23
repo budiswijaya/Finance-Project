@@ -1,5 +1,5 @@
-<img src= https://github.com/budiswijaya/Finance-Project/tree/0.png>
-<img src= https://github.com/budiswijaya/Finance-Project/tree/1.png>
+<img src= https://github.com/budiswijaya/Finance-Project/blob/main/0.png>
+<img src= https://github.com/budiswijaya/Finance-Project/blob/main/1.png>
 
 # Project Description: Finance Data Normalization and Categorization System
 
