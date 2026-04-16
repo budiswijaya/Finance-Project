@@ -2,7 +2,6 @@
   "name": "data-normalization-final",
   "private": true,
   "version": "0.1.0",
-  "homepage": "https://budiswijaya.github.io/Project-Data-Normalization-Final",
   "engines": {
     "node": "20.x"
   },
