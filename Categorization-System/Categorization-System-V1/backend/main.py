@@ -200,6 +200,7 @@ def build_log_payload(
         "error_message": metadata.get("error_message"),
     }
 
+
 # Load environment variables
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
@@ -216,6 +217,14 @@ DB_POOL_MAX_CONN = int(os.getenv("DB_POOL_MAX_CONN", "5"))
 )'''
 
 app = FastAPI(title="Data Parser API", version="1.0.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # later restrict to your domain
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 ROLLING_WINDOW_SECONDS = 60 * 60
 MIN_SAMPLE_SIZE = 100
