@@ -46,9 +46,8 @@
 
 ## Classification Architecture
 
-- Implementation module: `backend/category_classifier.py`
-- Matcher utility: `backend/word_boundary_matcher.py`
-- Observability utility: `backend/classification_observability.py`
+- Current implementation: classifier, cache, and observability logic are centralized in `backend/main.py`
+- Matcher helper file: `backend/word_boundary_matcher.py` exists for reusable boundary matching utilities
 - Endpoint integration: `backend/main.py`
 
 ### Classification pipeline

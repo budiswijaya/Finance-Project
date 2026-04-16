@@ -43,10 +43,10 @@
 - Sample keyword rules are seeded with dynamic category name lookup (no hard-coded IDs)
 - Keyword rules support mixed matching (`substring`, `word_boundary`, `exact`) with soft-delete (`is_active`)
 - Classification outcomes can be logged to `transaction_classification_log` for observability and later analytics
-- Classification logic is isolated in `backend/category_classifier.py` and called by `backend/main.py`
+- Classification, cache, and import observability logic are currently implemented in `backend/main.py`
 
 ### Complete API Reference
-All 32 endpoints are fully documented in [conventions.md](conventions.md#backend) with complete categorization by feature area and descriptions.
+All backend endpoints are documented in [conventions.md](conventions.md#backend) with categorization by feature area and descriptions.
 
 ## Development Setup
 
