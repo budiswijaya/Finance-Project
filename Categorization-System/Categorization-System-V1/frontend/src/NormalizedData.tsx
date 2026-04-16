@@ -91,7 +91,7 @@ const MAX_HISTORY_SIZE = 100;
 const HEADER_ROW_ID = "header";
 const ROW_INDEX_COLUMN_ID = "rowIndex";
 const NORMALIZED_DATA_STORAGE_KEY = "normalizedDataState";
-const API_BASE_URL = "http://localhost:8003";
+const API_BASE_URL = "https://finance-project-backend-x5n5.onrender.com/api";
 const DEBUG_LOGGING = true;
 const COLUMN_WIDTHS = {
   rowIndex: 40,
@@ -128,7 +128,7 @@ const actionGroupStyle: React.CSSProperties = {
 
 const getActionButtonStyle = (
   disabled: boolean,
-  activeColor: string
+  activeColor: string,
 ): React.CSSProperties => ({
   fontSize: "12px",
   padding: "4px 8px",
@@ -206,7 +206,7 @@ const GridPanel = ({
 
 const getColumnWidth = (
   header: string,
-  rows: Array<Record<string, unknown>>
+  rows: Array<Record<string, unknown>>,
 ): number => {
   const charWidth = 8;
   const padding = 20;
@@ -215,7 +215,7 @@ const getColumnWidth = (
     ...rows.map((row) => {
       const val = row[header];
       return val !== undefined && val !== null ? String(val).length : 0;
-    })
+    }),
   );
   return Math.min(300, Math.max(80, maxLen * charWidth + padding));
 };
@@ -247,7 +247,8 @@ class ApiError extends Error {
   }
 }
 
-const isApiError = (error: unknown): error is ApiError => error instanceof ApiError;
+const isApiError = (error: unknown): error is ApiError =>
+  error instanceof ApiError;
 
 const formatApiDetail = (detail: unknown): string => {
   if (typeof detail === "string") {
@@ -282,7 +283,7 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
 
 async function fetchCategoryEndpointWithFallback<T>(
   path: string,
-  options?: RequestInit
+  options?: RequestInit,
 ): Promise<T> {
   const primaryUrl = `${API_BASE_URL}${path}`;
   const adminUrl = `${API_BASE_URL}/admin${path}`;
@@ -305,7 +306,7 @@ async function fetchCategoryEndpointWithFallback<T>(
 
       if (bothMissing) {
         throw new Error(
-          "Category write endpoints are unavailable on the running backend. Please restart Categorization-System-V1 backend/main.py, then retry."
+          "Category write endpoints are unavailable on the running backend. Please restart Categorization-System-V1 backend/main.py, then retry.",
         );
       }
       throw adminError;
@@ -314,12 +315,12 @@ async function fetchCategoryEndpointWithFallback<T>(
 }
 
 const parseAmount = (text: string): number => {
-  if (!text || typeof text !== 'string') return 0;
+  if (!text || typeof text !== "string") return 0;
 
   const str = text.trim();
 
   // Handle parentheses for negative amounts (200.00) -> -200.00
-  if (str.startsWith('(') && str.endsWith(')')) {
+  if (str.startsWith("(") && str.endsWith(")")) {
     const inner = str.slice(1, -1);
     const num = Number(inner.replace(/[^0-9.-]/g, ""));
     return num ? -Math.abs(num) : 0;
@@ -334,10 +335,10 @@ const parseAmount = (text: string): number => {
 
 const convertGridRowsToNormalizedObjects = (
   gridRows: Row[],
-  gridColumns: Column[]
+  gridColumns: Column[],
 ): NormalizedRow[] => {
   const valueColumns = gridColumns.filter(
-    (column) => column.columnId !== ROW_INDEX_COLUMN_ID
+    (column) => column.columnId !== ROW_INDEX_COLUMN_ID,
   );
 
   return gridRows
@@ -352,7 +353,9 @@ const convertGridRowsToNormalizedObjects = (
           cellValue = parseAmount(cellValue);
         }
 
-        const normalizedKey = String(column.columnId).toLowerCase() as keyof NormalizedRow;
+        const normalizedKey = String(
+          column.columnId,
+        ).toLowerCase() as keyof NormalizedRow;
         normalizedRow[normalizedKey] = cellValue as never;
       });
 
@@ -362,7 +365,7 @@ const convertGridRowsToNormalizedObjects = (
 
 const createGridRowsFromSourceData = (
   sourceRows: Array<Record<string, unknown>>,
-  columns: Column[]
+  columns: Column[],
 ): Row[] => {
   const headerRow: Row = {
     rowId: HEADER_ROW_ID,
@@ -380,7 +383,7 @@ const createGridRowsFromSourceData = (
       { type: "header", text: String(idx + 1) },
       ...columns.slice(1).map((col) => {
         const matchingKey = Object.keys(sourceRow).find(
-          (k) => k.toLowerCase() === String(col.columnId).toLowerCase()
+          (k) => k.toLowerCase() === String(col.columnId).toLowerCase(),
         );
         return {
           type: "text" as const,
@@ -464,16 +467,26 @@ export function NormalizedData() {
   const [originalGridRows, setOriginalGridRows] = useState<Row[]>([]);
   const [normalizedGridCols, setNormalizedGridCols] = useState<Column[]>([]);
   const [normalizedGridRows, setNormalizedGridRows] = useState<Row[]>([]);
-  const [originalFocus, setOriginalFocus] = useState<FocusLocation | null>(null);
-  const [normalizedFocus, setNormalizedFocus] = useState<FocusLocation | null>(null);
+  const [originalFocus, setOriginalFocus] = useState<FocusLocation | null>(
+    null,
+  );
+  const [normalizedFocus, setNormalizedFocus] = useState<FocusLocation | null>(
+    null,
+  );
   const [isCalculated, setIsCalculated] = useState<boolean>(false);
-  const [editableCategories, setEditableCategories] = useState<EditableCategory[]>([]);
+  const [editableCategories, setEditableCategories] = useState<
+    EditableCategory[]
+  >([]);
   const [isCategoryLoading, setIsCategoryLoading] = useState<boolean>(false);
   const [savingCategoryId, setSavingCategoryId] = useState<number | null>(null);
-  const [deletingCategoryId, setDeletingCategoryId] = useState<number | null>(null);
+  const [deletingCategoryId, setDeletingCategoryId] = useState<number | null>(
+    null,
+  );
   const [isCreatingCategory, setIsCreatingCategory] = useState<boolean>(false);
   const [newCategoryName, setNewCategoryName] = useState<string>("");
-  const [newCategoryType, setNewCategoryType] = useState<"expense" | "income">("expense");
+  const [newCategoryType, setNewCategoryType] = useState<"expense" | "income">(
+    "expense",
+  );
   const [categorySearch, setCategorySearch] = useState<string>("");
   const [categoryMessage, setCategoryMessage] = useState<string>("");
 
@@ -488,14 +501,14 @@ export function NormalizedData() {
   // Memoized values
   const sourceHeaders = useMemo(
     () => (data ? Object.keys(data.rows[0] || {}) : []),
-    [data]
+    [data],
   );
 
   const normalizedSummary = useMemo(() => {
     const count = normalizedRows.length;
     const sum = normalizedRows.reduce(
       (acc, r) => acc + Number(r.amount || 0),
-      0
+      0,
     );
     return { count, sum };
   }, [normalizedRows]);
@@ -520,8 +533,15 @@ export function NormalizedData() {
   const refreshCategories = useCallback(async () => {
     setIsCategoryLoading(true);
     try {
-      const categoriesResponse = await fetchJson<CategoriesResponse>(`${API_BASE_URL}/categories`);
-      setEditableCategories(categoriesResponse.categories.map((category) => ({ ...category, isDirty: false })));
+      const categoriesResponse = await fetchJson<CategoriesResponse>(
+        `${API_BASE_URL}/categories`,
+      );
+      setEditableCategories(
+        categoriesResponse.categories.map((category) => ({
+          ...category,
+          isDirty: false,
+        })),
+      );
       setCategoryMessage("");
     } catch (error) {
       console.error("Category refresh error:", error);
@@ -542,28 +562,29 @@ export function NormalizedData() {
                 [field]: value,
                 isDirty: true,
               }
-            : category
-        )
+            : category,
+        ),
       );
     },
-    []
+    [],
   );
 
-  const handleSaveCategory = useCallback(
-    async (category: EditableCategory) => {
-      const trimmedName = category.name.trim();
-      if (!trimmedName) {
-        setCategoryMessage("Category name cannot be empty.");
-        return;
-      }
-      if (category.type !== "income" && category.type !== "expense") {
-        setCategoryMessage("Category type must be income or expense.");
-        return;
-      }
+  const handleSaveCategory = useCallback(async (category: EditableCategory) => {
+    const trimmedName = category.name.trim();
+    if (!trimmedName) {
+      setCategoryMessage("Category name cannot be empty.");
+      return;
+    }
+    if (category.type !== "income" && category.type !== "expense") {
+      setCategoryMessage("Category type must be income or expense.");
+      return;
+    }
 
-      setSavingCategoryId(category.id);
-      try {
-        await fetchCategoryEndpointWithFallback<CategoryOption>(`/categories/${category.id}`, {
+    setSavingCategoryId(category.id);
+    try {
+      await fetchCategoryEndpointWithFallback<CategoryOption>(
+        `/categories/${category.id}`,
+        {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
@@ -572,30 +593,29 @@ export function NormalizedData() {
             name: trimmedName,
             type: category.type,
           }),
-        });
+        },
+      );
 
-        setEditableCategories((prev) =>
-          prev.map((item) =>
-            item.id === category.id
-              ? {
-                  ...item,
-                  name: trimmedName,
-                  isDirty: false,
-                }
-              : item
-          )
-        );
-        setCategoryMessage(`Saved category: ${trimmedName}`);
-      } catch (error) {
-        console.error("Category save error:", error);
-        const message = error instanceof Error ? error.message : "Unknown error";
-        setCategoryMessage(`Category save failed: ${message}`);
-      } finally {
-        setSavingCategoryId(null);
-      }
-    },
-    []
-  );
+      setEditableCategories((prev) =>
+        prev.map((item) =>
+          item.id === category.id
+            ? {
+                ...item,
+                name: trimmedName,
+                isDirty: false,
+              }
+            : item,
+        ),
+      );
+      setCategoryMessage(`Saved category: ${trimmedName}`);
+    } catch (error) {
+      console.error("Category save error:", error);
+      const message = error instanceof Error ? error.message : "Unknown error";
+      setCategoryMessage(`Category save failed: ${message}`);
+    } finally {
+      setSavingCategoryId(null);
+    }
+  }, []);
 
   const handleCreateCategory = useCallback(async () => {
     const trimmedName = newCategoryName.trim();
@@ -606,16 +626,19 @@ export function NormalizedData() {
 
     setIsCreatingCategory(true);
     try {
-      const created = await fetchCategoryEndpointWithFallback<CategoryOption>("/categories", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const created = await fetchCategoryEndpointWithFallback<CategoryOption>(
+        "/categories",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: trimmedName,
+            type: newCategoryType,
+          }),
         },
-        body: JSON.stringify({
-          name: trimmedName,
-          type: newCategoryType,
-        }),
-      });
+      );
 
       setEditableCategories((prev) => [
         ...prev,
@@ -635,49 +658,63 @@ export function NormalizedData() {
     }
   }, [newCategoryName, newCategoryType]);
 
-  const handleDeleteCategory = useCallback(async (category: EditableCategory) => {
-    setDeletingCategoryId(category.id);
-    try {
-      const usage = await fetchCategoryEndpointWithFallback<CategoryUsageResponse>(`/categories/${category.id}/usage`);
+  const handleDeleteCategory = useCallback(
+    async (category: EditableCategory) => {
+      setDeletingCategoryId(category.id);
+      try {
+        const usage =
+          await fetchCategoryEndpointWithFallback<CategoryUsageResponse>(
+            `/categories/${category.id}/usage`,
+          );
 
-      let forceDelete = false;
-      if (usage.transaction_count > 0) {
-        const confirmToken = `DELETE ${category.name}`;
-        const confirmation = window.prompt(
-          `This category has ${usage.transaction_count} transactions and ${usage.keyword_count} keyword rules.\n` +
-          `Deleting it will also delete those transactions.\n\n` +
-          `To confirm, type exactly: ${confirmToken}`
-        );
-        if (confirmation !== confirmToken) {
-          setCategoryMessage("Delete canceled. Confirmation text did not match.");
-          return;
+        let forceDelete = false;
+        if (usage.transaction_count > 0) {
+          const confirmToken = `DELETE ${category.name}`;
+          const confirmation = window.prompt(
+            `This category has ${usage.transaction_count} transactions and ${usage.keyword_count} keyword rules.\n` +
+              `Deleting it will also delete those transactions.\n\n` +
+              `To confirm, type exactly: ${confirmToken}`,
+          );
+          if (confirmation !== confirmToken) {
+            setCategoryMessage(
+              "Delete canceled. Confirmation text did not match.",
+            );
+            return;
+          }
+          forceDelete = true;
+        } else {
+          const confirmed = window.confirm(
+            `Delete category '${category.name}'? This cannot be undone.`,
+          );
+          if (!confirmed) {
+            setCategoryMessage("Delete canceled.");
+            return;
+          }
         }
-        forceDelete = true;
-      } else {
-        const confirmed = window.confirm(
-          `Delete category '${category.name}'? This cannot be undone.`
+
+        const query = forceDelete ? "?force=true" : "";
+        await fetchCategoryEndpointWithFallback<{ deleted: boolean }>(
+          `/categories/${category.id}${query}`,
+          {
+            method: "DELETE",
+          },
         );
-        if (!confirmed) {
-          setCategoryMessage("Delete canceled.");
-          return;
-        }
+
+        setEditableCategories((prev) =>
+          prev.filter((item) => item.id !== category.id),
+        );
+        setCategoryMessage(`Deleted category: ${category.name}`);
+      } catch (error) {
+        console.error("Category delete error:", error);
+        const message =
+          error instanceof Error ? error.message : "Unknown error";
+        setCategoryMessage(`Category delete failed: ${message}`);
+      } finally {
+        setDeletingCategoryId(null);
       }
-
-      const query = forceDelete ? "?force=true" : "";
-      await fetchCategoryEndpointWithFallback<{ deleted: boolean }>(`/categories/${category.id}${query}`, {
-        method: "DELETE",
-      });
-
-      setEditableCategories((prev) => prev.filter((item) => item.id !== category.id));
-      setCategoryMessage(`Deleted category: ${category.name}`);
-    } catch (error) {
-      console.error("Category delete error:", error);
-      const message = error instanceof Error ? error.message : "Unknown error";
-      setCategoryMessage(`Category delete failed: ${message}`);
-    } finally {
-      setDeletingCategoryId(null);
-    }
-  }, []);
+    },
+    [],
+  );
 
   useEffect(() => {
     refreshCategories();
@@ -797,7 +834,7 @@ export function NormalizedData() {
         console.error("Parsing error:", err);
       }
     },
-    []
+    [],
   );
 
   // Normalize mapped source columns and append them to the normalized grid.
@@ -811,7 +848,7 @@ export function NormalizedData() {
     }
 
     const targetColumnsToInclude = TARGET_COLUMNS.filter((targetColumn) =>
-      selectedMappedTargets.includes(targetColumn)
+      selectedMappedTargets.includes(targetColumn),
     );
 
     // Initialize normalized columns on first run only.
@@ -835,7 +872,7 @@ export function NormalizedData() {
     }
 
     const sourceDataRows = originalGridRows.filter(
-      (row) => row.rowId !== HEADER_ROW_ID
+      (row) => row.rowId !== HEADER_ROW_ID,
     );
     const normalizedRowsToAppend: NormalizedRow[] = [];
     const normalizedGridRowsToAppend: Row[] = [];
@@ -851,7 +888,7 @@ export function NormalizedData() {
 
       targetColumnsToInclude.forEach((targetColumn) => {
         const sourceColumnIndex = originalGridCols.findIndex(
-          (column) => mapping[column.columnId] === targetColumn
+          (column) => mapping[column.columnId] === targetColumn,
         );
 
         let cellText = "";
@@ -895,7 +932,7 @@ export function NormalizedData() {
 
     // Append rows under a single header row.
     const existingDataRows = normalizedGridRows.filter(
-      (r) => r.rowId !== HEADER_ROW_ID
+      (r) => r.rowId !== HEADER_ROW_ID,
     );
     const allRows = [
       headerRow,
@@ -938,7 +975,9 @@ export function NormalizedData() {
           cells: row.cells.map((cell, idx) => {
             const colId = originalGridCols[idx]?.columnId;
             const change = rowChanges.find((c) => c.columnId === colId);
-            return change ? { ...cell, text: getCellText(change.newCell) } : cell;
+            return change
+              ? { ...cell, text: getCellText(change.newCell) }
+              : cell;
           }),
         };
       });
@@ -963,7 +1002,7 @@ export function NormalizedData() {
       normalizedRows,
       normalizedGridCols,
       pushState,
-    ]
+    ],
   );
 
   const handleNormalizedGridChanges = useCallback(
@@ -979,7 +1018,9 @@ export function NormalizedData() {
           cells: row.cells.map((cell, idx) => {
             const colId = normalizedGridCols[idx]?.columnId;
             const change = rowChanges.find((c) => c.columnId === colId);
-            return change ? { ...cell, text: getCellText(change.newCell) } : cell;
+            return change
+              ? { ...cell, text: getCellText(change.newCell) }
+              : cell;
           }),
         };
       });
@@ -989,7 +1030,10 @@ export function NormalizedData() {
         return;
       }
 
-      const newObjects = convertGridRowsToNormalizedObjects(updatedRows, normalizedGridCols);
+      const newObjects = convertGridRowsToNormalizedObjects(
+        updatedRows,
+        normalizedGridCols,
+      );
 
       setNormalizedGridRows(updatedRows);
       setNormalizedRows(newObjects);
@@ -1000,12 +1044,7 @@ export function NormalizedData() {
         normalizedGridCols,
       });
     },
-    [
-      normalizedGridRows,
-      normalizedGridCols,
-      originalGridRows,
-      pushState,
-    ]
+    [normalizedGridRows, normalizedGridCols, originalGridRows, pushState],
   );
 
   // Download and submit
@@ -1016,7 +1055,7 @@ export function NormalizedData() {
     const csvContent = [
       headers.join(","),
       ...normalizedRows.map(
-        (r) => `${r.date ?? ""},${r.note ?? ""},${r.amount ?? 0}`
+        (r) => `${r.date ?? ""},${r.note ?? ""},${r.amount ?? 0}`,
       ),
     ].join("\n");
 
@@ -1031,40 +1070,58 @@ export function NormalizedData() {
 
   const handleCalculate = useCallback(() => {
     if (normalizedRows.length === 0) {
-      setSubmitMessage("No data to calculate. Please normalize some data first.");
+      setSubmitMessage(
+        "No data to calculate. Please normalize some data first.",
+      );
       setIsCalculated(false);
       return;
     }
 
     // Validate data
-    const invalidRows = normalizedRows.filter(row =>
-      !row.date || row.amount === undefined || row.amount === null || isNaN(row.amount)
+    const invalidRows = normalizedRows.filter(
+      (row) =>
+        !row.date ||
+        row.amount === undefined ||
+        row.amount === null ||
+        isNaN(row.amount),
     );
 
     if (invalidRows.length > 0) {
-      setSubmitMessage(`Validation failed: ${invalidRows.length} rows have missing or invalid date/amount fields.`);
+      setSubmitMessage(
+        `Validation failed: ${invalidRows.length} rows have missing or invalid date/amount fields.`,
+      );
       setIsCalculated(false);
       return;
     }
 
     const { count, sum } = normalizedSummary;
-    setSubmitMessage(`Calculated: ${count} transactions with total amount ${formatCurrencyNumber(sum)}. Ready to submit.`);
+    setSubmitMessage(
+      `Calculated: ${count} transactions with total amount ${formatCurrencyNumber(sum)}. Ready to submit.`,
+    );
     setIsCalculated(true);
   }, [normalizedSummary, normalizedRows]);
 
   const handleSubmit = useCallback(async () => {
     if (!isCalculated) {
-      setSubmitMessage("Please calculate first to validate your data before submitting.");
+      setSubmitMessage(
+        "Please calculate first to validate your data before submitting.",
+      );
       return;
     }
     try {
       // Re-validate before submission to guard against stale/edited rows after Calculate.
-      const invalidRows = normalizedRows.filter(row =>
-        !row.date || row.amount === undefined || row.amount === null || isNaN(row.amount)
+      const invalidRows = normalizedRows.filter(
+        (row) =>
+          !row.date ||
+          row.amount === undefined ||
+          row.amount === null ||
+          isNaN(row.amount),
       );
 
       if (invalidRows.length > 0) {
-        setSubmitMessage(`Validation failed: ${invalidRows.length} rows have missing or invalid date/amount fields.`);
+        setSubmitMessage(
+          `Validation failed: ${invalidRows.length} rows have missing or invalid date/amount fields.`,
+        );
         return;
       }
 
@@ -1075,25 +1132,30 @@ export function NormalizedData() {
       }
 
       const { types } = await response.json();
-      const hasIncome = types.includes('income');
-      const hasExpense = types.includes('expense');
+      const hasIncome = types.includes("income");
+      const hasExpense = types.includes("expense");
 
       if (!hasIncome || !hasExpense) {
         const missing = [];
-        if (!hasIncome) missing.push('income');
-        if (!hasExpense) missing.push('expense');
-        setSubmitMessage(`You should define category type that does not exist in database first to submit data. Missing: ${missing.join(', ')}`);
+        if (!hasIncome) missing.push("income");
+        if (!hasExpense) missing.push("expense");
+        setSubmitMessage(
+          `You should define category type that does not exist in database first to submit data. Missing: ${missing.join(", ")}`,
+        );
         return;
       }
 
       // Submit the data
-      const submitResponse = await fetch(`${API_BASE_URL}/transactions/import`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
+      const submitResponse = await fetch(
+        `${API_BASE_URL}/transactions/import`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(normalizedRows),
         },
-        body: JSON.stringify(normalizedRows)
-      });
+      );
 
       if (!submitResponse.ok) {
         const errorData = await submitResponse.json();
@@ -1103,7 +1165,7 @@ export function NormalizedData() {
       const result = await submitResponse.json();
       const { sum } = normalizedSummary;
       setSubmitMessage(
-        `Successfully added ${result.inserted} transactions with sum amount ${formatCurrencyNumber(sum)}.`
+        `Successfully added ${result.inserted} transactions with sum amount ${formatCurrencyNumber(sum)}.`,
       );
       setIsCalculated(false); // Reset calculation state after successful submission
       debugLog("Submitted normalized rows:", normalizedRows);
@@ -1129,7 +1191,10 @@ export function NormalizedData() {
     };
 
     try {
-      localStorage.setItem(NORMALIZED_DATA_STORAGE_KEY, JSON.stringify(savedState));
+      localStorage.setItem(
+        NORMALIZED_DATA_STORAGE_KEY,
+        JSON.stringify(savedState),
+      );
       alert("Normalized data saved successfully!");
     } catch (error) {
       console.error("Error saving data:", error);
@@ -1212,7 +1277,9 @@ export function NormalizedData() {
     setOriginalGridRows(updatedRows);
 
     // Move focus to the nearest available row.
-    const remainingDataRows = updatedRows.filter((r) => r.rowId !== HEADER_ROW_ID);
+    const remainingDataRows = updatedRows.filter(
+      (r) => r.rowId !== HEADER_ROW_ID,
+    );
     if (remainingDataRows.length > 0) {
       // Try to focus on the same position, or the last row if we deleted the last one
       const deletedIndex =
@@ -1292,7 +1359,9 @@ export function NormalizedData() {
     setOriginalGridRows(updatedRows);
 
     // Move focus to the nearest available column.
-    const remainingCols = newCols.filter((c) => c.columnId !== ROW_INDEX_COLUMN_ID);
+    const remainingCols = newCols.filter(
+      (c) => c.columnId !== ROW_INDEX_COLUMN_ID,
+    );
     if (remainingCols.length > 0) {
       // Try to focus on the same position, or the last column if we deleted the last one
       const deletedIndex =
@@ -1364,13 +1433,18 @@ export function NormalizedData() {
 
     const updatedRows = normalizedGridRows.filter((r) => r.rowId !== rowId);
 
-    const newObjects = convertGridRowsToNormalizedObjects(updatedRows, normalizedGridCols);
+    const newObjects = convertGridRowsToNormalizedObjects(
+      updatedRows,
+      normalizedGridCols,
+    );
 
     setNormalizedGridRows(updatedRows);
     setNormalizedRows(newObjects);
 
     // Move focus to the nearest available row.
-    const remainingDataRows = updatedRows.filter((r) => r.rowId !== HEADER_ROW_ID);
+    const remainingDataRows = updatedRows.filter(
+      (r) => r.rowId !== HEADER_ROW_ID,
+    );
     if (remainingDataRows.length > 0) {
       // Try to focus on the same position, or the last row if we deleted the last one
       const deletedIndex =
@@ -1433,7 +1507,7 @@ export function NormalizedData() {
     }
 
     const colIndex = normalizedGridCols.findIndex(
-      (c) => c.columnId === columnId
+      (c) => c.columnId === columnId,
     );
 
     if (colIndex < 0) {
@@ -1455,7 +1529,9 @@ export function NormalizedData() {
     setNormalizedRows(newObjects);
 
     // Move focus to the nearest available column.
-    const remainingCols = newCols.filter((c) => c.columnId !== ROW_INDEX_COLUMN_ID);
+    const remainingCols = newCols.filter(
+      (c) => c.columnId !== ROW_INDEX_COLUMN_ID,
+    );
     if (remainingCols.length > 0) {
       // Try to focus on the same position, or the last column if we deleted the last one
       const deletedIndex =
@@ -1495,7 +1571,9 @@ export function NormalizedData() {
 
   // ---------- Render ----------
   return (
-    <div className={`workspace-scroll${isInitialState ? " initial-state" : ""}`}>
+    <div
+      className={`workspace-scroll${isInitialState ? " initial-state" : ""}`}
+    >
       <div
         style={{
           display: "flex",
@@ -1546,188 +1624,332 @@ export function NormalizedData() {
           />
         )}
 
-      {/* Control Panel */}
-      <div style={{ flex: "0 0 auto", minWidth: "300px", textAlign: "center" }}>
-        <div className="file-input-wrapper">
-          <input
-            type="file"
-            id="file-upload"
-            accept=".json,.txt,.xlsx,.csv"
-            onChange={handleSourceFileChange}
-          />
-          <label htmlFor="file-upload" className="file-upload-label">
-            Choose File
-          </label>
-        </div>
-        <p className="file-note">Only .xlsx .csv .txt .json files</p>
+        {/* Control Panel */}
+        <div
+          style={{ flex: "0 0 auto", minWidth: "300px", textAlign: "center" }}
+        >
+          <div className="file-input-wrapper">
+            <input
+              type="file"
+              id="file-upload"
+              accept=".json,.txt,.xlsx,.csv"
+              onChange={handleSourceFileChange}
+            />
+            <label htmlFor="file-upload" className="file-upload-label">
+              Choose File
+            </label>
+          </div>
+          <p className="file-note">Only .xlsx .csv .txt .json files</p>
 
-        {data && (
-          <div className="admin-panel" style={{ marginLeft: "auto", marginRight: "auto" }}>
-            <h4 style={{ marginTop: 0, marginBottom: "0.5rem", textAlign: "center" }}>Column Mapping</h4>
-            <p className="admin-muted" style={{ marginTop: 0, marginBottom: "0.75rem", textAlign: "center" }}>
-              Match your file columns to Date, Note, and Amount.
+          {data && (
+            <div
+              className="admin-panel"
+              style={{ marginLeft: "auto", marginRight: "auto" }}
+            >
+              <h4
+                style={{
+                  marginTop: 0,
+                  marginBottom: "0.5rem",
+                  textAlign: "center",
+                }}
+              >
+                Column Mapping
+              </h4>
+              <p
+                className="admin-muted"
+                style={{
+                  marginTop: 0,
+                  marginBottom: "0.75rem",
+                  textAlign: "center",
+                }}
+              >
+                Match your file columns to Date, Note, and Amount.
+              </p>
+
+              {sourceHeaders.map((header) => (
+                <div
+                  key={header}
+                  style={{
+                    marginBottom: "0.5rem",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                  }}
+                >
+                  <label style={{ minWidth: "96px", textAlign: "left" }}>
+                    {header}
+                  </label>
+                  <select
+                    value={mapping[header] || ""}
+                    onChange={(e) =>
+                      setMapping((prev) => ({
+                        ...prev,
+                        [header]: e.target.value,
+                      }))
+                    }
+                    style={{ flex: 1 }}
+                  >
+                    <option value="">Select field</option>
+                    <option value="Date">Date</option>
+                    <option value="Note">Note</option>
+                    <option value="Amount">Amount</option>
+                    <option value="Ignore">Ignore</option>
+                  </select>
+                </div>
+              ))}
+
+              <div
+                style={{
+                  display: "flex",
+                  gap: "0.5rem",
+                  flexWrap: "wrap",
+                  marginTop: "1rem",
+                  justifyContent: "center",
+                }}
+              >
+                <button onClick={handleAppendNormalizedData}>Add Data</button>
+                <button
+                  onClick={handleDownload}
+                  disabled={!normalizedRows.length}
+                >
+                  Download
+                </button>
+                <button
+                  onClick={handleCalculate}
+                  disabled={!normalizedRows.length}
+                >
+                  Calculate
+                </button>
+                <button
+                  onClick={handleSubmit}
+                  disabled={!normalizedRows.length || !isCalculated}
+                >
+                  Submit
+                </button>
+              </div>
+
+              {submitMessage && (
+                <p
+                  className="admin-muted"
+                  style={{ marginTop: "0.75rem", textAlign: "center" }}
+                >
+                  {submitMessage}
+                </p>
+              )}
+            </div>
+          )}
+
+          <div
+            className="admin-panel"
+            style={{ marginLeft: "auto", marginRight: "auto" }}
+          >
+            <h4
+              style={{
+                marginTop: 0,
+                marginBottom: "0.5rem",
+                textAlign: "center",
+              }}
+            >
+              Category Manager
+            </h4>
+            <p
+              className="admin-muted"
+              style={{
+                marginTop: 0,
+                marginBottom: "0.75rem",
+                textAlign: "center",
+              }}
+            >
+              Search, add, edit, and delete categories in one place.
+            </p>
+            <p
+              className="admin-muted"
+              style={{
+                marginTop: 0,
+                marginBottom: "0.75rem",
+                textAlign: "center",
+              }}
+            >
+              Categories are grouped by type to make long lists easier to
+              manage.
             </p>
 
-            {sourceHeaders.map((header) => (
-              <div key={header} style={{ marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                <label style={{ minWidth: "96px", textAlign: "left" }}>{header}</label>
-                <select
-                  value={mapping[header] || ""}
-                  onChange={(e) =>
-                    setMapping((prev) => ({
-                      ...prev,
-                      [header]: e.target.value,
-                    }))
-                  }
-                  style={{ flex: 1 }}
-                >
-                  <option value="">Select field</option>
-                  <option value="Date">Date</option>
-                  <option value="Note">Note</option>
-                  <option value="Amount">Amount</option>
-                  <option value="Ignore">Ignore</option>
-                </select>
-              </div>
-            ))}
+            <div className="category-row">
+              <input
+                type="text"
+                value={categorySearch}
+                onChange={(e) => setCategorySearch(e.target.value)}
+                placeholder="Search category name"
+                style={{ width: "100%" }}
+              />
+            </div>
+
+            <div className="category-row" style={{ marginTop: "0.5rem" }}>
+              <input
+                type="text"
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                placeholder="New category name"
+                style={{ flex: 1 }}
+              />
+              <select
+                value={newCategoryType}
+                onChange={(e) =>
+                  setNewCategoryType(e.target.value as "expense" | "income")
+                }
+                style={{ width: "110px" }}
+              >
+                <option value="expense">expense</option>
+                <option value="income">income</option>
+              </select>
+              <button
+                onClick={handleCreateCategory}
+                disabled={isCreatingCategory}
+              >
+                {isCreatingCategory ? "Adding..." : "Add"}
+              </button>
+            </div>
 
             <div
               style={{
                 display: "flex",
-                gap: "0.5rem",
-                flexWrap: "wrap",
-                marginTop: "1rem",
                 justifyContent: "center",
+                marginBottom: "0.75rem",
               }}
             >
-              <button onClick={handleAppendNormalizedData}>Add Data</button>
-              <button onClick={handleDownload} disabled={!normalizedRows.length}>
-                Download
-              </button>
-              <button onClick={handleCalculate} disabled={!normalizedRows.length}>
-                Calculate
-              </button>
-              <button onClick={handleSubmit} disabled={!normalizedRows.length || !isCalculated}>
-                Submit
+              <button onClick={refreshCategories} disabled={isCategoryLoading}>
+                {isCategoryLoading
+                  ? "Loading categories..."
+                  : "Refresh Categories"}
               </button>
             </div>
 
-            {submitMessage && (
-              <p className="admin-muted" style={{ marginTop: "0.75rem", textAlign: "center" }}>
-                {submitMessage}
+            <div style={{ maxHeight: "300px", overflowY: "auto" }}>
+              {groupedCategories.expense.length === 0 &&
+                groupedCategories.income.length === 0 &&
+                !isCategoryLoading && (
+                  <p className="admin-muted" style={{ textAlign: "center" }}>
+                    No categories found.
+                  </p>
+                )}
+
+              {(["expense", "income"] as const).map((groupType) => {
+                const groupItems = groupedCategories[groupType];
+                if (!groupItems.length) return null;
+
+                return (
+                  <details key={groupType} className="admin-section">
+                    <summary className="category-group-summary">
+                      {groupType} ({groupItems.length})
+                    </summary>
+
+                    <div style={{ textAlign: "left", marginTop: "0.5rem" }}>
+                      {groupItems.map((category) => (
+                        <div
+                          key={category.id}
+                          className="admin-section"
+                          style={{ marginTop: "0.5rem" }}
+                        >
+                          <label
+                            style={{
+                              display: "block",
+                              marginBottom: "0.25rem",
+                            }}
+                          >
+                            Name
+                          </label>
+                          <input
+                            type="text"
+                            value={category.name}
+                            onChange={(e) =>
+                              handleCategoryFieldChange(
+                                category.id,
+                                "name",
+                                e.target.value,
+                              )
+                            }
+                            style={{ width: "100%", marginBottom: "0.4rem" }}
+                          />
+                          <label
+                            style={{
+                              display: "block",
+                              marginBottom: "0.25rem",
+                            }}
+                          >
+                            Type
+                          </label>
+                          <select
+                            value={category.type}
+                            onChange={(e) =>
+                              handleCategoryFieldChange(
+                                category.id,
+                                "type",
+                                e.target.value,
+                              )
+                            }
+                            style={{ width: "100%", marginBottom: "0.4rem" }}
+                          >
+                            <option value="expense">expense</option>
+                            <option value="income">income</option>
+                          </select>
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              gap: "0.35rem",
+                            }}
+                          >
+                            <span className="admin-muted">
+                              ID: {category.id}
+                            </span>
+                            <div
+                              className="category-row"
+                              style={{ justifyContent: "flex-end" }}
+                            >
+                              <button
+                                onClick={() => handleSaveCategory(category)}
+                                disabled={
+                                  !category.isDirty ||
+                                  savingCategoryId === category.id
+                                }
+                              >
+                                {savingCategoryId === category.id
+                                  ? "Saving..."
+                                  : "Save"}
+                              </button>
+                              <button
+                                onClick={() => handleDeleteCategory(category)}
+                                disabled={deletingCategoryId === category.id}
+                                style={{
+                                  backgroundColor: "#fee2e2",
+                                  borderColor: "#fecaca",
+                                }}
+                              >
+                                {deletingCategoryId === category.id
+                                  ? "Deleting..."
+                                  : "Delete"}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                );
+              })}
+            </div>
+
+            {categoryMessage && (
+              <p
+                className="admin-muted"
+                style={{ marginTop: "0.75rem", textAlign: "center" }}
+              >
+                {categoryMessage}
               </p>
             )}
           </div>
-        )}
-
-        <div className="admin-panel" style={{ marginLeft: "auto", marginRight: "auto" }}>
-          <h4 style={{ marginTop: 0, marginBottom: "0.5rem", textAlign: "center" }}>Category Manager</h4>
-          <p className="admin-muted" style={{ marginTop: 0, marginBottom: "0.75rem", textAlign: "center" }}>
-            Search, add, edit, and delete categories in one place.
-          </p>
-          <p className="admin-muted" style={{ marginTop: 0, marginBottom: "0.75rem", textAlign: "center" }}>
-            Categories are grouped by type to make long lists easier to manage.
-          </p>
-
-          <div className="category-row">
-            <input
-              type="text"
-              value={categorySearch}
-              onChange={(e) => setCategorySearch(e.target.value)}
-              placeholder="Search category name"
-              style={{ width: "100%" }}
-            />
-          </div>
-
-          <div className="category-row" style={{ marginTop: "0.5rem" }}>
-            <input
-              type="text"
-              value={newCategoryName}
-              onChange={(e) => setNewCategoryName(e.target.value)}
-              placeholder="New category name"
-              style={{ flex: 1 }}
-            />
-            <select
-              value={newCategoryType}
-              onChange={(e) => setNewCategoryType(e.target.value as "expense" | "income")}
-              style={{ width: "110px" }}
-            >
-              <option value="expense">expense</option>
-              <option value="income">income</option>
-            </select>
-            <button onClick={handleCreateCategory} disabled={isCreatingCategory}>
-              {isCreatingCategory ? "Adding..." : "Add"}
-            </button>
-          </div>
-
-          <div style={{ display: "flex", justifyContent: "center", marginBottom: "0.75rem" }}>
-            <button onClick={refreshCategories} disabled={isCategoryLoading}>
-              {isCategoryLoading ? "Loading categories..." : "Refresh Categories"}
-            </button>
-          </div>
-
-          <div style={{ maxHeight: "300px", overflowY: "auto" }}>
-            {groupedCategories.expense.length === 0 && groupedCategories.income.length === 0 && !isCategoryLoading && (
-              <p className="admin-muted" style={{ textAlign: "center" }}>No categories found.</p>
-            )}
-
-            {(["expense", "income"] as const).map((groupType) => {
-              const groupItems = groupedCategories[groupType];
-              if (!groupItems.length) return null;
-
-              return (
-                <details key={groupType} className="admin-section">
-                  <summary className="category-group-summary">
-                    {groupType} ({groupItems.length})
-                  </summary>
-
-                  <div style={{ textAlign: "left", marginTop: "0.5rem" }}>
-                    {groupItems.map((category) => (
-                      <div key={category.id} className="admin-section" style={{ marginTop: "0.5rem" }}>
-                        <label style={{ display: "block", marginBottom: "0.25rem" }}>Name</label>
-                        <input
-                          type="text"
-                          value={category.name}
-                          onChange={(e) => handleCategoryFieldChange(category.id, "name", e.target.value)}
-                          style={{ width: "100%", marginBottom: "0.4rem" }}
-                        />
-                        <label style={{ display: "block", marginBottom: "0.25rem" }}>Type</label>
-                        <select
-                          value={category.type}
-                          onChange={(e) => handleCategoryFieldChange(category.id, "type", e.target.value)}
-                          style={{ width: "100%", marginBottom: "0.4rem" }}
-                        >
-                          <option value="expense">expense</option>
-                          <option value="income">income</option>
-                        </select>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.35rem" }}>
-                          <span className="admin-muted">ID: {category.id}</span>
-                          <div className="category-row" style={{ justifyContent: "flex-end" }}>
-                            <button
-                              onClick={() => handleSaveCategory(category)}
-                              disabled={!category.isDirty || savingCategoryId === category.id}
-                            >
-                              {savingCategoryId === category.id ? "Saving..." : "Save"}
-                            </button>
-                            <button
-                              onClick={() => handleDeleteCategory(category)}
-                              disabled={deletingCategoryId === category.id}
-                              style={{ backgroundColor: "#fee2e2", borderColor: "#fecaca" }}
-                            >
-                              {deletingCategoryId === category.id ? "Deleting..." : "Delete"}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </details>
-              );
-            })}
-          </div>
-
-          {categoryMessage && <p className="admin-muted" style={{ marginTop: "0.75rem", textAlign: "center" }}>{categoryMessage}</p>}
         </div>
-      </div>
 
         {/* Normalized Data Grid */}
         {data && normalizedGridRows.length > 0 && (
