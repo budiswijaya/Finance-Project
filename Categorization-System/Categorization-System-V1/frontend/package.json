@@ -3,7 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "homepage": "https://budiswijaya.github.io/Project-Data-Normalization-Final",
-  "node-version": "v22.18.0",
+  "engines": {
+    "node": "20.x"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
