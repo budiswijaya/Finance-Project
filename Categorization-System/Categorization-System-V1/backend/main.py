@@ -206,14 +206,14 @@ load_dotenv(Path(__file__).resolve().parent / ".env")
 DB_POOL_MIN_CONN = 1
 DB_POOL_MAX_CONN = int(os.getenv("DB_POOL_MAX_CONN", "5"))
 
-db_pool = SimpleConnectionPool(
+'''db_pool = SimpleConnectionPool(
     minconn=DB_POOL_MIN_CONN,
     maxconn=DB_POOL_MAX_CONN,
     host=os.getenv("DB_HOST"),
     database=os.getenv("DB_NAME"),
     user=os.getenv("DB_USER"),
     password=os.getenv("DB_PASSWORD"),
-)
+)'''
 
 app = FastAPI(title="Data Parser API", version="1.0.0")
 
