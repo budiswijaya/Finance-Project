@@ -91,7 +91,8 @@ const MAX_HISTORY_SIZE = 100;
 const HEADER_ROW_ID = "header";
 const ROW_INDEX_COLUMN_ID = "rowIndex";
 const NORMALIZED_DATA_STORAGE_KEY = "normalizedDataState";
-const API_BASE_URL = "https://finance-project-backend-x5n5.onrender.com/api";
+const API_BASE_URL =
+  "https://data-normalization-and-categorization.onrender.com";
 const DEBUG_LOGGING = true;
 const COLUMN_WIDTHS = {
   rowIndex: 40,
