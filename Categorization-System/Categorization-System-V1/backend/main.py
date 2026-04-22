@@ -204,17 +204,25 @@ def build_log_payload(
 # Load environment variables
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
-DB_POOL_MIN_CONN = 1
-DB_POOL_MAX_CONN = int(os.getenv("DB_POOL_MAX_CONN", "5"))
+# Database connection configuration
+# Use DATABASE_URL for Neon (preferred) or fall back to individual variables for local development
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    # Fallback to individual DB variables for backward compatibility
+    DATABASE_URL = f"postgresql://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}@{os.getenv('DB_HOST')}/{os.getenv('DB_NAME')}"
 
-'''db_pool = SimpleConnectionPool(
-    minconn=DB_POOL_MIN_CONN,
-    maxconn=DB_POOL_MAX_CONN,
-    host=os.getenv("DB_HOST"),
-    database=os.getenv("DB_NAME"),
-    user=os.getenv("DB_USER"),
-    password=os.getenv("DB_PASSWORD"),
-)'''
+# Connection pooling is handled by Neon, so we use direct connections
+# DB_POOL_MIN_CONN = 1
+# DB_POOL_MAX_CONN = int(os.getenv("DB_POOL_MAX_CONN", "5"))
+
+# '''db_pool = SimpleConnectionPool(
+#     minconn=DB_POOL_MIN_CONN,
+#     maxconn=DB_POOL_MAX_CONN,
+#     host=os.getenv("DB_HOST"),
+#     database=os.getenv("DB_NAME"),
+#     user=os.getenv("DB_USER"),
+#     password=os.getenv("DB_PASSWORD"),
+# )'''
 
 app = FastAPI(title="Data Parser API", version="1.0.0")
 
@@ -254,9 +262,10 @@ import_observability_lock = Lock()
 
 @contextmanager
 def get_db_connection():
-    """Acquire one pooled database connection for the duration of a request/task."""
-    # Grab a connection from the pool. If all are in use, waits until one is available.
-    db_conn = db_pool.getconn()
+    """Acquire database connection for the duration of a request/task."""
+    # For Neon: Use direct connection (pooling handled by Neon pooler)
+    # For local development: Direct connection to PostgreSQL
+    db_conn = psycopg2.connect(DATABASE_URL)
     try:
         yield db_conn
     finally:
@@ -266,16 +275,26 @@ def get_db_connection():
             db_conn.rollback()
         except Exception:
             pass
-        # Return the connection to the pool. It stays live for reuse by others.
-        db_pool.putconn(db_conn)
+        # Close the connection (Neon pooler will handle connection reuse)
+        db_conn.close()
 
 
-def get_pool_status() -> Dict[str, int]:
-    """Return basic pool sizing information for admin visibility."""
-    return {
-        "min_connections": DB_POOL_MIN_CONN,
-        "max_connections": DB_POOL_MAX_CONN,
-    }
+def get_pool_status() -> Dict[str, str]:
+    """Return database connection information for admin visibility."""
+    # For Neon: Connection pooling is handled by Neon pooler
+    # For local: Direct connection info
+    if DATABASE_URL and "neon.tech" in DATABASE_URL:
+        return {
+            "type": "neon_pooler",
+            "description": "Connection pooling handled by Neon serverless database",
+            "url_pattern": DATABASE_URL.split("@")[1].split("/")[0] if "@" in DATABASE_URL else "unknown"
+        }
+    else:
+        return {
+            "type": "direct_postgresql",
+            "description": "Direct connection to PostgreSQL database",
+            "host": os.getenv("DB_HOST", "unknown")
+        }
 
 
 def _utc_now() -> datetime:
@@ -1990,8 +2009,25 @@ async def parse_file(file: UploadFile = File(...)) -> Dict[str, Any]:
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
-    return {"status": "healthy"}
+    """Health check endpoint with database connectivity validation"""
+    try:
+        # Test database connection
+        with get_db_connection() as db_conn:
+            cursor = db_conn.cursor()
+            cursor.execute("SELECT 1")
+            db_status = "connected"
+
+        return {
+            "status": "healthy",
+            "database": db_status,
+            "timestamp": _utc_now().isoformat().replace("+00:00", "Z")
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "database": f"error: {str(e)}",
+            "timestamp": _utc_now().isoformat().replace("+00:00", "Z")
+        }
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8003)
