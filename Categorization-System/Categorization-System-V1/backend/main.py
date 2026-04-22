@@ -279,7 +279,7 @@ def get_db_connection():
         db_conn.close()
 
 
-def get_pool_status() -> Dict[str, str]:
+def get_connection_info() -> Dict[str, str]:
     """Return database connection information for admin visibility."""
     # For Neon: Connection pooling is handled by Neon pooler
     # For local: Direct connection info
@@ -287,13 +287,13 @@ def get_pool_status() -> Dict[str, str]:
         return {
             "type": "neon_pooler",
             "description": "Connection pooling handled by Neon serverless database",
-            "url_pattern": DATABASE_URL.split("@")[1].split("/")[0] if "@" in DATABASE_URL else "unknown"
+            "database_type": "postgresql"
         }
     else:
         return {
             "type": "direct_postgresql",
             "description": "Direct connection to PostgreSQL database",
-            "host": os.getenv("DB_HOST", "unknown")
+            "database_type": "postgresql"
         }
 
 
@@ -1400,7 +1400,7 @@ async def get_classification_context_status():
             "cache_version": cache_version,
             "cache_warm": is_warm,
             "rebuilt_at": rebuilt_at,
-            "pool": get_pool_status(),
+            "connection": get_connection_info(),
             "merchant_normalization_enabled": runtime_flags["merchant_normalization_enabled"],
         }
     except Exception as e:

@@ -2,40 +2,42 @@
 
 ## Frontend
 
-| Item | Detail |
-|------|--------|
-| Framework | React 19 |
-| Language | TypeScript ~5.8 |
-| Build tool | Vite 7 (plugin: `@vitejs/plugin-react-swc`) |
-| Grid library | `@silevis/reactgrid` v4.1.17 (free tier) |
-| Linting | ESLint 9 + `eslint-plugin-react-hooks` + `eslint-plugin-react-refresh` |
-| Deploy | GitHub Pages via `gh-pages`; base path `/Project-Data-Normalization-Final/` |
+| Item         | Detail                                                                 |
+| ------------ | ---------------------------------------------------------------------- |
+| Framework    | React 19                                                               |
+| Language     | TypeScript ~5.8                                                        |
+| Build tool   | Vite 7 (plugin: `@vitejs/plugin-react-swc`)                            |
+| Grid library | `@silevis/reactgrid` v4.1.17 (free tier)                               |
+| Linting      | ESLint 9 + `eslint-plugin-react-hooks` + `eslint-plugin-react-refresh` |
+| Deploy       | Vercel; base path `/`                                                  |
 
 ### ReactGrid Notes
+
 - Free tier is used — **column resize events are not available** (noted in code comment on `handleColumnsChanged`)
 - `stickyTopRows={1}` and `stickyLeftColumns={1}` keep header and row-index pinned
 - `enableRowSelection` and `enableColumnSelection` enable focus tracking used for delete operations
 
 ## Backend
 
-| Item | Detail |
-|------|--------|
-| Framework | FastAPI 0.104.1 |
-| Server | Uvicorn 0.24.0 |
-| Language | Python (version not pinned in requirements) |
-| DB driver | `psycopg2` + local `SimpleConnectionPool` (PostgreSQL) |
-| File parsing | `pandas` 2.1.4 + `openpyxl>=3.1.5` |
-| Config | `python-dotenv 1.0.0` — reads `.env` for `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` |
-| Additional | `python-multipart` 0.0.6 (for multipart form handling), `httpx` 0.27.2 (HTTP client for testing) |
-| Port | 8003 |
+| Item         | Detail                                                                                                                                  |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Framework    | FastAPI 0.104.1                                                                                                                         |
+| Server       | Uvicorn 0.24.0                                                                                                                          |
+| Language     | Python (version not pinned in requirements)                                                                                             |
+| DB driver    | `psycopg2` with direct connections (Neon serverless database)                                                                           |
+| File parsing | `pandas` 2.1.4 + `openpyxl>=3.1.5`                                                                                                      |
+| Config       | `python-dotenv 1.0.0` — reads `.env` for `DATABASE_URL` (preferred) or individual vars (`DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`) |
+| Additional   | `python-multipart` 0.0.6 (for multipart form handling), `httpx` 0.27.2 (HTTP client for testing)                                        |
+| Port         | 8003                                                                                                                                    |
 
 ### CORS
-- Allows only `http://localhost:5173` (Vite dev server)
-- All methods and headers permitted for that origin
+
+- Allows `http://localhost:5173` (Vite dev server) and Vercel production domains
+- All methods and headers permitted for allowed origins
 
 ## Database
 
-- PostgreSQL
+- PostgreSQL (Neon serverless database for production, local PostgreSQL for development)
 - Schema defined in `backend/database_setup.sql`
 - Phase 1/2 tables: `categories`, `transactions`, `category_keywords`, `transaction_classification_log`
 - Phase 3 tables: `classification_context_version`, `merchant_normalization_rules`
@@ -46,11 +48,13 @@
 - Classification, cache, and import observability logic are currently implemented in `backend/main.py`
 
 ### Complete API Reference
+
 All backend endpoints are documented in [conventions.md](conventions.md#backend) with categorization by feature area and descriptions.
 
 ## Development Setup
 
 ### Backend Setup
+
 1. Create `backend/.env` from `backend/.env.example`:
    ```
    DB_HOST=localhost
@@ -65,11 +69,13 @@ All backend endpoints are documented in [conventions.md](conventions.md#backend)
    - Database setup runs automatically on first startup
 
 ### Frontend Setup
+
 1. Install dependencies: `npm install`
 2. Start dev server: `npm run dev` (Vite on `http://localhost:5173`)
 3. Build for deployment: `npm run build` (outputs to `dist/`)
 
 ### Full Stack Integration
+
 - Frontend at `http://localhost:5173` ↔ Backend at `http://localhost:8003`
 - Backend environment is loaded from `backend/.env` via script-relative path (not cwd-dependent)
 
