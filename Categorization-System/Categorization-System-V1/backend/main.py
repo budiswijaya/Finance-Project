@@ -510,7 +510,11 @@ def normalize_merchant_note(note: str, rules: List[Dict[str, Any]]) -> str:
 # CORS middleware to allow frontend requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # Vite dev server
+    allow_origins=[
+        "http://localhost:5173",  # Vite dev server
+        "https://data-normalization-and-categorization-engine-project.vercel.app",  # Vercel production
+        "https://data-normalization-and-categorization-engine-project-ga73glx8x.vercel.app"  # Alternative Vercel domain
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
