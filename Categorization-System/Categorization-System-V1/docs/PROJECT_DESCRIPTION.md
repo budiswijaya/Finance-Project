@@ -3,9 +3,9 @@
 **Short Name:** Finance Categorization System
 
 **Author:** Architecture Team  
-**Date:** March 22, 2026  
+**Date:** March 22, 2026 (Last Updated: April 28, 2026)  
 **Status:** Active  
-**Version:** 1.0
+**Version:** 1.0 (Phase 3 Complete)
 
 ---
 
@@ -16,6 +16,7 @@ This project helps users import finance data from files, clean and normalize tha
 Before this system, users had to classify many transactions manually. That was slow, error-prone, and hard to maintain. The goal of this project is to make the workflow understandable, repeatable, and easy to improve.
 
 Why this matters:
+
 - Faster transaction processing
 - More consistent category assignment
 - Better visibility into why a category was chosen
@@ -38,6 +39,16 @@ Why this matters:
 - Advanced authentication/authorization design
 - Distributed cache or microservices deployment
 
+## 3.5 System Evolution
+
+The system has evolved through three phases:
+
+- **Phase 1 (Core)**: Basic parsing, classification, and keyword rules
+- **Phase 2 (Enhanced)**: Extended keyword matching, soft deletes, observability logging
+- **Phase 3 (Production-Ready)**: Merchant normalization preprocessing, feature flags, admin operations, and observability alerts
+
+Phase 3 was added in April 2026 to handle real-world transaction data issues and provide operational visibility.
+
 ---
 
 ## 4. Architecture Overview
@@ -52,24 +63,25 @@ High-level runtime:
 ├────────────────────────────────────────────────────────────────────┤
 │                                                                    │
 │  Frontend (React + Vite)                                           │
-│  • File upload                                                      │
-│  • Data normalization grid                                          │
-│  • Category admin panel                                             │
-│         │                                                           │
-│         ▼ HTTP (REST)                                               │
-│  Backend (FastAPI)                                                  │
-│  • Parser endpoints (/parse)                                        │
-│  • Import pipeline (/transactions/import)                           │
-│  • Category engine + keyword rules                                  │
-│  • Admin APIs (/admin/*)                                            │
-│         │                                                           │
-│         ▼ SQL                                                       │
-│  PostgreSQL                                                         │
-│  • categories                                                       │
-│  • category_keywords                                                │
-│  • transactions                                                     │
-│  • transaction_classification_log                                   │
-│                                                                    │
+│  • File upload                                                     │
+│  • Data normalization grid                                         │
+│  • Category admin panel                                            │
+│         │                                                          │
+│         ▼ HTTP (REST)                                              │
+│  Backend (FastAPI)                                                 │
+│  • Parser endpoints (/parse)                                       │
+│  • Import pipeline (/transactions/import)                          │
+│  • Category engine + keyword rules                                 │
+│  • Admin APIs (/admin/*)                                           │
+│         │                                                          │
+│         ▼ SQL                                                      │
+│  PostgreSQL                                                        │
+│  • categories                                                      │
+│  • category_keywords                                               │
+│  • transactions                                                    │
+│  • transaction_classification_log                                  │
+│  • merchant_normalization_rules (Phase 3)                          │
+│  • classification_context_version (Phase 3)                        │
 └────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -78,11 +90,13 @@ High-level runtime:
 ## 5. Components
 
 ### 5.1 Frontend App Shell
+
 - **Location:** `src/App.tsx`
 - **Responsibility:** Mounts the main workflow component.
 - **Key point for juniors:** This file is intentionally small. Most behavior lives in the feature component.
 
 ### 5.2 Frontend Main Workflow
+
 - **Location:** `src/NormalizedData.tsx`
 - **Responsibility:**
   - Upload and parse file
@@ -96,16 +110,19 @@ High-level runtime:
   - API helper functions for backend calls and fallback behavior
 
 ### 5.3 Backend API Layer
+
 - **Location:** `backend/main.py`
 - **Responsibility:** Exposes all REST endpoints used by frontend and admin operations.
 
 ### 5.4 Backend Parser Engine
+
 - **Location:** `backend/main.py` parser functions
 - **Responsibility:** Converts uploaded file content into structured rows.
 - **Supported formats:** CSV, Excel, JSON, text-delimited.
 - **Important detail:** Date normalization tries many date formats to produce consistent `YYYY-MM-DD` output.
 
 ### 5.5 Backend Category Engine
+
 - **Location:** `backend/main.py` classification functions
 - **Responsibility:** Determine `category_id` for each transaction note using a 3-phase deterministic strategy.
 - **Phases:**
@@ -114,11 +131,13 @@ High-level runtime:
   - Phase 3: Error with guidance when no match found
 
 ### 5.6 Backend Context Cache
+
 - **Location:** `backend/main.py` cache helpers
 - **Responsibility:** Cache category/keyword context in memory and refresh by version.
 - **Reason:** Avoid repeated heavy DB reads on every transaction row.
 
 ### 5.7 Backend Admin and Observability
+
 - **Location:** `backend/main.py` `/admin/*` endpoints
 - **Responsibility:**
   - Feature flags (merchant normalization on/off)
@@ -127,6 +146,7 @@ High-level runtime:
   - Import observability summary and alerts
 
 ### 5.8 Database Layer
+
 - **Location:** PostgreSQL + `backend/database_setup.sql`
 - **Responsibility:** Persist all categories, rules, transactions, and optional logs.
 
@@ -158,7 +178,7 @@ Normalized rows ready for submit
 POST /transactions/import (rows[])
     │
     ├─ Validate date/amount per row
-    ├─ (Optional) normalize merchant note via feature flag
+    ├─ (Optional) normalize merchant note via feature flag (Phase 3)
     ├─ Determine category_id via 3-phase classifier
     ├─ Insert into transactions
     └─ (Optional) write classification log
@@ -196,7 +216,7 @@ Use this as a mental model when reading the code:
 7. Frontend sends normalized rows to `POST /transactions/import`.
 8. Backend loads classification context (categories + active rules) from cache or DB.
 9. For each row, backend validates date and amount.
-10. Backend optionally normalizes merchant note if feature flag is enabled.
+10. Backend optionally normalizes merchant note if feature flag is enabled (Phase 3).
 11. Backend runs classification engine:
     - Phase 1 keyword match
     - Phase 2 category-name fallback
@@ -212,14 +232,14 @@ This flow is the heart of the system. If you understand this, you understand the
 
 ## 7. Technology Choices
 
-| Technology | Purpose | Rationale |
-|---|---|---|
-| React + TypeScript | Frontend UI | Strong developer ergonomics and safer refactoring |
-| Vite | Frontend dev/build tool | Fast local development and simple setup |
-| FastAPI | Backend API framework | Clear endpoint model and strong Python ecosystem |
-| psycopg2 + connection pool | PostgreSQL access | Reliable SQL control with pooled connections |
-| PostgreSQL | Data store | Strong relational model and indexing support |
-| ReactGrid | Editable tabular UI | Good fit for spreadsheet-like normalization tasks |
+| Technology                 | Purpose                 | Rationale                                         |
+| -------------------------- | ----------------------- | ------------------------------------------------- |
+| React + TypeScript         | Frontend UI             | Strong developer ergonomics and safer refactoring |
+| Vite                       | Frontend dev/build tool | Fast local development and simple setup           |
+| FastAPI                    | Backend API framework   | Clear endpoint model and strong Python ecosystem  |
+| psycopg2 + connection pool | PostgreSQL access       | Reliable SQL control with pooled connections      |
+| PostgreSQL                 | Data store              | Strong relational model and indexing support      |
+| ReactGrid                  | Editable tabular UI     | Good fit for spreadsheet-like normalization tasks |
 
 ---
 
@@ -243,12 +263,14 @@ This flow is the heart of the system. If you understand this, you understand the
 ## 10. Scalability and Performance
 
 Current model:
+
 - Single backend service process
 - Local in-memory cache for classification context
 - Connection pool in backend process
 - In-memory observability windows for import metrics
 
 Known limits:
+
 - No distributed cache
 - No multi-instance synchronization
 - Large batch imports are memory-bound
@@ -257,19 +279,20 @@ Known limits:
 
 ## 11. Risks and Mitigations
 
-| Risk | Impact | Mitigation |
-|---|---|---|
-| Bad input file format | Parse/import failure | Clear parse errors and editable grid before submit |
-| Missing keyword coverage | Phase 3 classification errors | Rule validation endpoint and admin CRUD for keywords |
-| Stale cache after rule changes | Incorrect classification | Versioned context + explicit cache invalidation |
-| Duplicate active keyword rules | Conflict and ambiguity | Partial unique index on active rows only |
-| Slow import endpoint | Poor UX | Latency warnings + observability endpoints |
+| Risk                           | Impact                        | Mitigation                                                |
+| ------------------------------ | ----------------------------- | --------------------------------------------------------- |
+| Bad input file format          | Parse/import failure          | Clear parse errors and editable grid before submit        |
+| Missing keyword coverage       | Phase 3 classification errors | Rule validation endpoint and admin CRUD for keywords      |
+| Stale cache after rule changes | Incorrect classification      | Versioned context + explicit cache invalidation (Phase 3) |
+| Duplicate active keyword rules | Conflict and ambiguity        | Partial unique index on active rows only                  |
+| Slow import endpoint           | Poor UX                       | Latency warnings + observability endpoints (Phase 3)      |
 
 ---
 
 ## 12. Deployment Architecture
 
 Environments:
+
 - Development: local frontend + local backend + local PostgreSQL
 - Production: same pattern with production hosts and secured config
 
@@ -293,6 +316,7 @@ Deployment diagram:
 ```
 
 Basic startup:
+
 1. Start backend (`python backend/main.py`)
 2. Start frontend (`npm run dev`)
 3. Ensure DB schema exists (`backend/database_setup.sql`)
@@ -305,7 +329,8 @@ Basic startup:
 - **Metrics:** import latency, failure rate, phase 3 fallback rate
 - **Alerts:** rolling-window warnings available via admin endpoints
 
-Admin observability endpoints:
+Admin observability endpoints (Phase 3):
+
 - `GET /admin/observability/summary`
 - `GET /admin/observability/alerts`
 
@@ -326,7 +351,9 @@ Admin observability endpoints:
 - `backend/main.py`
 - `backend/database_setup.sql`
 - `docs/testing.md`
-- `docs/system_patterns.md`
+- `docs/system_patterns.md` (includes Phase 3 patterns)
+- `docs/system_architectural.md` (includes Phase 3 endpoints)
+- `incident_reports/` (Phase 3 incident documentation)
 
 ---
 
@@ -334,7 +361,9 @@ Admin observability endpoints:
 
 - **Parser:** Code that reads a file and turns it into structured rows.
 - **Normalization:** Making data consistent (same columns, same date format, clean amount values).
+- **Merchant Normalization (Phase 3):** Preprocessing step that cleans transaction notes before classification (e.g., "MCDONALDS #123" → "mcdonalds").
 - **Classification engine:** Logic that decides which category a transaction belongs to.
 - **Soft delete:** Mark a row as inactive instead of physically removing it.
-- **Observability:** Logs/metrics/alerts that help us understand system behavior.
+- **Feature Flag (Phase 3):** Runtime toggle that enables/disables optional functionality like merchant normalization.
+- **Observability (Phase 3):** Logs/metrics/alerts that help us understand system behavior and detect issues.
 - **Cache:** Temporary in-memory data used to speed up repeated operations.

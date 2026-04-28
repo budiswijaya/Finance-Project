@@ -4,8 +4,6 @@
 
 **ALWAYS read the existing documentation in the `docs/` folder before starting any work.** This ensures you understand the system architecture, technical context, and existing patterns.
 
-Use `@docs-guide` agent when you need a structured summary of project documentation relevant to the current task.
-
 ## Project Documentation Structure
 
 This project maintains comprehensive documentation in the `docs/` folder:
@@ -16,10 +14,10 @@ This project maintains comprehensive documentation in the `docs/` folder:
 4. `docs/formatting.md` - Language version, formatting rules and conventions, indentation and line length standards
 5. `docs/conventions.md` - Standard app structure, naming conventions, pagination patterns, startup and signal registration
 
-## Agent Workflow
+## Workflow
 
 1. **Before any task**: Read relevant documentation from `docs/` folder
-2. **When documentation needs updating**: Use `@docs-writer` agent to update appropriate doc files
+2. **When documentation needs updating**: Update appropriate doc files directly
 3. **Follow documented patterns**: All work must align with established conventions and architectural decisions
 
 ## Documentation Update Guidelines

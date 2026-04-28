@@ -494,6 +494,9 @@ def _apply_normalization_rule(text: str, pattern: str, replacement: str, match_t
 def normalize_merchant_note(note: str, rules: List[Dict[str, Any]]) -> str:
     """Normalize notes deterministically using global active rules."""
     normalized = (note or "").lower().strip()
+    normalized = re.sub(r"\s+#\d+", "", normalized)
+    normalized = re.sub(r"[^a-z0-9 ]+", " ", normalized)
+    normalized = re.sub(r"\s+", " ", normalized)
     for rule in rules:
         pattern = rule.get("pattern")
         replacement = rule.get("replacement")

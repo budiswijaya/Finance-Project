@@ -1,39 +1,54 @@
 ---
-description: Review code changes for critical issues
+description: Review code changes for critical security, performance, and correctness issues
 ---
 
-# Code Review
-
 Review code changes for critical issues only.
-Not only review the diff itself, but go deep into the context code to understand how it works underneath so that you can find real problems and vulnerabilities.
 
 Focus area (if specified): $ARGUMENTS
 
-## Get Changes
+## 1. Get Changes
 
 Use git read commands:
-- `git status` — see modified files
-- `git diff` — unstaged changes
-- `git diff --staged` — staged changes
-- `git diff main...HEAD` — all branch changes vs main
-- `git log -p -n 5` — recent commits with diffs
+- `git status` - see modified files
+- `git diff` - unstaged changes
+- `git diff --staged` - staged changes
+- `git diff main...HEAD` - all branch changes vs main
+- `git log -p -n 5` - recent commits with diffs
 
-## Check Patterns
+## 2. Understand Documented Patterns
 
-Read documentation in `docs/` to understand existing patterns and conventions. Identify if changes break established:
-- Architectural patterns
-- Design decisions
-- Naming conventions, code formatting
-- Module relationships
+Read documentation to understand existing patterns:
+- `docs/system_patterns.md` - Architectural patterns and design decisions
+- `docs/conventions.md` - Naming conventions, file structure
+- `docs/formatting.md` - Code style and formatting rules
+- `docs/tech_context.md` - Technical constraints and dependencies
 
-## Review Criteria
+## 3. Review Against Standards
+
+Identify if changes break established:
+- Architectural patterns and design decisions
+- Naming conventions and code formatting
+- Module relationships and boundaries
+- Technical constraints
+
+## 4. Check for Critical Issues
 
 Focus on **critical issues only**:
-- **Bugs** — Logic errors, null handling, edge cases
-- **Performance** — N+1 queries, inefficient algorithms, memory leaks
-- **Security** — SQL injection, XSS, auth bypasses, data exposure
-- **Correctness** — Business logic errors, data integrity violations
-- **Pattern Breaks** — Violations of established architectural patterns or conventions
+
+- **Bugs**: Logic errors, null handling, edge cases, off-by-one, race conditions
+- **Performance**: N+1 queries, inefficient algorithms, memory leaks, unnecessary database hits, missing indexes
+- **Security**: SQL injection, XSS, auth bypasses, authorization issues, data exposure, exposed secrets, missing input validation
+- **Correctness**: Business logic errors, data integrity violations, state management issues, transaction handling
+- **Pattern Breaks**: Violations of established architectural patterns, breaks module boundaries, introduces tech debt
+
+## 5. Analyze Context
+
+Don't just review the diff:
+- Read surrounding code to understand context
+- Check how changed code is called
+- Verify error handling paths
+- Understand data flow through the change
+- Look for downstream impacts
 
 ## Output Format
 
@@ -41,8 +56,8 @@ Focus on **critical issues only**:
 ```
 ISSUES FOUND
 
-- [Brief critical issue]
-- [Brief critical issue]
+- [Brief critical issue with file:line reference]
+- [Another critical issue with specific details]
 ```
 
 **If no critical issues:**
@@ -52,4 +67,14 @@ APPROVED
 No critical issues. Ready to merge.
 ```
 
-Skip minor style issues, nitpicks, or non-critical suggestions.
+**Skip**: minor style issues, nitpicks, personal preferences, non-critical suggestions, micro-optimizations, formatting (handled by tools).
+
+## Review Priorities
+
+1. **Security vulnerabilities** - Highest priority
+2. **Bugs that will cause failures** - High priority
+3. **Performance issues** - Medium priority
+4. **Pattern violations** - Medium priority
+5. **Code quality concerns** - Low priority (only if critical)
+
+When reporting issues, be specific: reference file and line numbers, explain the problem, describe the impact.

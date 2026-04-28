@@ -2,255 +2,160 @@
 description: Create a high-level design document through guided Q&A
 ---
 
-Create a High-Level Design (HLD) document for: **$ARGUMENTS**
+Create a High-Level Design (HLD) document.
+
+**Input from engineer:** $ARGUMENTS
 
 ## Your Role
 
-You are an HLD facilitator. Your job is to:
-1. Gather information through conversation context and targeted questions
-2. Track completion of all 15 HLD sections
-3. Generate ASCII art diagrams for architecture and data flow
-4. Only write the final HLD when the user confirms readiness
+You are a **writing assistant**, not a designer. The engineer does all thinking and decision-making. You help by:
 
-**DO NOT** write the HLD immediately. First gather all required information.
+- Guiding them through a structured thinking process (asking the right questions)
+- Writing their decisions into a clear, well-formatted document
+- Creating diagrams from their descriptions
+- Researching trade-offs for options they identify
 
----
+**DO NOT** write the HLD immediately. First guide the engineer through the thinking phases.
 
-## MANDATORY Workflow
+## Writing Style Rules
 
-### Step 1: Check for Existing HLD
+- **Specific** — numbers, not adjectives. "p95 < 200ms" not "fast".
+- **Concise** — no filler, no boilerplate, no padding. Every sentence carries information.
+- **No buzzwords** — no "leveraging", "robust", "seamless", "cutting-edge".
+- **Honest** — name the downsides of every choice.
+- **Justified** — every component exists because of a concrete requirement.
+- **Clarity-focused** — after reading, next steps should be obvious.
 
-First, check if `/docs/hlds/$ARGUMENTS.md` already exists:
-- If it exists: Warn the user and STOP. This command only creates new HLDs.
-- If it doesn't exist: Continue to Step 2.
+## Diagrams
 
-### Step 2: Scan Conversation Context
+Use **Mermaid** for all diagrams (renders in GitHub, Notion, VS Code, most markdown tools).
 
-Review the current conversation for any existing information about:
-- Problem being solved
-- System components mentioned
-- Technologies discussed
-- Requirements stated
+**What to include:**
+1. **Architecture diagram** (always) — system boundaries, services, databases, external systems and connections. Use `graph TD`.
+2. **Data flow / Sequence diagram** (always) — trace key requests end-to-end, show who calls whom. Use `sequenceDiagram`.
+3. **Use case diagram** — when multiple user roles or entry points exist.
+4. **ER / Data model** — when new data entities or schema changes are involved. Use `erDiagram`.
+5. **Deployment diagram** — only if infrastructure is non-trivial.
 
-Extract and note any relevant context already available.
+**Rules:** Keep under 10-12 nodes per diagram (split if larger). Label every arrow with what flows through it. Show external systems and boundaries clearly.
 
-### Step 3: Present HLD Checklist
+## Workflow
 
-Present the 15-section HLD checklist showing what information is needed:
+### Step 1: Parse Initial Input
 
-```
-HLD Sections Status for: $ARGUMENTS
-─────────────────────────────────────
-[ ] 1.  Problem Statement
-[ ] 2.  Goals
-[ ] 3.  Non-Goals
-[ ] 4.  Architecture Overview
-[ ] 5.  Components
-[ ] 6.  Data Flow
-[ ] 7.  Technology Choices
-[ ] 8.  Integration Points
-[ ] 9.  Security Considerations
-[ ] 10. Scalability & Performance
-[ ] 11. Risks & Mitigations
-[ ] 12. Deployment Architecture
-[ ] 13. Observability
-[ ] 14. Open Questions
-[ ] 15. References
-```
+The engineer may provide anything — a feature name, a brain dump with design thoughts, requirements, screenshots, diagrams, or links. Parse ALL of it:
 
-Mark any sections that can be filled from conversation context.
+- Extract the feature/project name (for the file name)
+- Identify any design decisions, requirements, constraints already provided
+- Review any screenshots or diagrams shared
+- Map provided information to the thinking phases below
 
-### Step 4: Gather Information Through Phases
+Don't re-ask questions the engineer already answered in their input.
 
-Ask questions in logical phases.
+### Step 2: Check for Existing HLD
 
-**Phase 1: Context & Problem**
-- What problem does this solve?
-- Who are the stakeholders/users?
-- Why is this needed now?
+Derive a file name from the input. Check if `/docs/hlds/{name}.md` exists. If yes — warn and stop.
 
-**Phase 2: Scope**
-- What are the main goals? (2-4 bullet points)
-- What is explicitly OUT of scope?
+### Step 3: Guide Through 6 Thinking Phases
 
-**Phase 3: Technical Design**
-- What are the main components/modules?
-- How do they interact with each other?
-- What technologies/frameworks will be used and why?
+**Skip questions already answered by the initial input.** Show what you extracted, confirm, then fill the gaps.
 
-**Phase 4: Integration & Data**
-- What external systems does this integrate with?
-- How does data flow through the system?
-- What are the main data entities?
+Walk the engineer through each phase with targeted questions:
 
-**Phase 5: Quality Attributes**
-- What are the security requirements?
-- What are performance/scalability expectations?
-- Any compliance requirements?
+**Phase 1 — Understand the Problem**
+- What exactly are you solving? (push for specifics)
+- Who is this for?
+- What are the explicit non-goals?
+- What does success look like in numbers?
+- What happens if we do nothing?
 
-**Phase 6: Deployment & Operations**
-- How will this be deployed? (environments, CI/CD)
-- What infrastructure is needed?
-- How will you monitor and log?
+**Phase 2 — Audit What Exists**
+- What already exists and works? What can be reused?
+- What are the real limitations of the current solution?
+- What do other teams depend on that this might affect?
 
-**Phase 7: Risks & Open Items**
-- What could go wrong? What are the mitigations?
-- What decisions are still unresolved?
-- Any relevant references or prior art?
+**Phase 3 — Turn Requirements Into Numbers**
+- Push every vague requirement into a concrete number
+- "Many users" → RPS at peak? "Fast" → what p95? "Reliable" → what uptime?
+- The numbers determine the design
 
-### Step 5: Track Progress
+**Phase 4 — Build Simplest Architecture**
+- Can one service handle this? Can the existing DB handle this?
+- What are the fewest moving parts that satisfy requirements?
+- Trace data flow end-to-end. Does it hold up?
+- Every component must be justified by a requirement
 
-After each user response:
-1. Update your internal tracking of which sections are complete
-2. Show updated checklist with [x] for completed, [~] for partial/TBD, [ ] for missing
-3. Ask about the next incomplete section
+**Phase 5 — Hardest Decisions**
+- What are the 2-3 defining decisions?
+- For each: what options exist? (always include "do nothing")
+- Trade-offs? Downsides of the chosen option?
 
-The user can say:
-- "N/A" - Mark section as not applicable
-- "TBD" - Mark section as to be determined (will use placeholder)
-- "skip" - Skip to next section
-- "done" - Ready to generate the HLD
+**Phase 6 — Design for Failure**
+- Pre-mortem: how would you guarantee this system fails?
+- DB down? Traffic 10x? Third-party API dies? Bad deployment?
+- Each failure mode must be addressed
 
-### Step 6: Generate ASCII Diagrams
+### Step 4: Write the HLD
 
-When you have enough information, generate ASCII art diagrams for:
-
-**Architecture Overview** - Show system boundaries and component relationships:
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      System Name                             │
-├─────────────────────────────────────────────────────────────┤
-│    ┌──────────┐      ┌──────────┐      ┌──────────┐        │
-│    │Component │─────▶│Component │─────▶│Component │        │
-│    │    A     │      │    B     │      │    C     │        │
-│    └──────────┘      └──────────┘      └──────────┘        │
-└─────────────────────────────────────────────────────────────┘
-```
-
-**Data Flow** - Show request/response patterns:
-```
-┌────────┐    Request    ┌────────┐    Query     ┌────────┐
-│ Source │──────────────▶│Process │─────────────▶│ Store  │
-└────────┘               └────────┘              └────────┘
-```
-
-**Deployment** - Show infrastructure layout:
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     Environment                              │
-│  ┌─────────┐    ┌─────────┐    ┌─────────┐                  │
-│  │ Service │───▶│ Service │───▶│ Service │                  │
-│  └─────────┘    └─────────┘    └─────────┘                  │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### Step 7: Present Summary
-
-Before writing, show a summary:
-
-```
-HLD Ready for: $ARGUMENTS
-─────────────────────────────────────
-[x] 1.  Problem Statement     - Complete
-[x] 2.  Goals                 - Complete
-[~] 3.  Non-Goals             - TBD
-[x] 4.  Architecture Overview - Complete (with diagram)
-...
-─────────────────────────────────────
-Sections: 12 complete, 2 TBD, 1 N/A
-```
-
-Ask user to confirm: "Ready to write the HLD to `/docs/hlds/$ARGUMENTS.md`?"
-
-### Step 8: Write the HLD
-
-Only after user confirmation:
-
-1. Ensure `/docs/hlds/` directory exists (create if needed)
-2. Write the HLD using the template below
-3. Report success with the file path
-
----
-
-## HLD Template
+After engineer confirms, write to `/docs/hlds/{name}.md` using this template:
 
 ```markdown
 # High-Level Design: {Feature Name}
 
-**Author:** {author or TBD}
-**Date:** {current date}
+**Author:** {author}
+**Date:** {date}
 **Status:** Draft
 
-## 1. Problem Statement
-{problem description and why it matters}
+## 1. Context
+{One short paragraph. What exists. The problem. Just enough to get up to speed.}
 
-## 2. Goals
-- {goal 1}
-- {goal 2}
+## 2. Goals & Non-Goals
+### Goals
+- {specific, measurable goal}
 
-## 3. Non-Goals
-- {explicitly out of scope items}
+### Non-Goals
+- {what's deliberately out of scope and why}
 
-## 4. Architecture Overview
-{high-level description}
+## 3. Design Overview
+{One paragraph TL;DR of the chosen solution.}
 
-{ASCII diagram here}
+## 4. Detailed Design
+### Architecture
+{mermaid component diagram}
 
-## 5. Components
-### 5.1 {Component Name}
-- **Responsibility:** {what it does}
-- **Interfaces:** {how it connects}
+### Components
+{Each component, its responsibility, how it connects.}
 
-## 6. Data Flow
-{description}
+### Data Flow
+{End-to-end request flow. mermaid sequence diagram.}
 
-{ASCII diagram here}
+### Technology Choices
+| Technology | Purpose | Why This Over Alternatives |
+|------------|---------|---------------------------|
 
-## 7. Technology Choices
-| Technology | Purpose | Rationale |
-|------------|---------|-----------|
-| {tech} | {use} | {why chosen} |
+### Use Cases
+{Main user flows.}
 
-## 8. Integration Points
-- {external system}: {how it integrates}
+## 5. Alternatives Considered
+### Option: {name}
+- Pros / Cons / Why not
 
-## 9. Security Considerations
-- {security items}
+### Option: Do Nothing
+- Pros / Cons / Why not
 
-## 10. Scalability & Performance
-- {considerations}
+### Chosen: {name}
+- Why it fits / Downsides accepted
 
-## 11. Risks & Mitigations
-| Risk | Impact | Mitigation |
-|------|--------|------------|
-| {risk} | {impact} | {mitigation} |
+## 6. Cross-Cutting Concerns
+- Security / Privacy / Observability (keep short)
 
-## 12. Deployment Architecture
-- **Environments:** {environments}
-- **Infrastructure:** {infrastructure}
-- **CI/CD:** {deployment approach}
-
-{ASCII diagram here if applicable}
-
-## 13. Observability
-- **Logging:** {approach}
-- **Metrics:** {what to measure}
-- **Alerting:** {conditions}
-
-## 14. Open Questions
-- [ ] {unresolved question}
-
-## 15. References
-- {related docs, links}
+## 7. Implementation Phases (optional)
+{Only if rollout is complicated.}
 ```
 
----
+## Rules
 
-## Important Rules
-
-- **DO NOT** skip the information gathering phase
-- **DO NOT** write the HLD until user confirms
-- **DO** use ASCII art diagrams for visual sections
-- **DO** allow flexible completion (TBD placeholders are OK)
-- **DO** track and display progress after each interaction
-- **DO** extract any relevant context from the conversation history
+- **DO NOT** skip thinking phases or generate design decisions
+- **DO NOT** use buzzwords or filler
+- **DO** push back on vague answers — ask for numbers
+- **DO** flag when something proposed already exists in the codebase

@@ -1,40 +1,41 @@
 ---
-description: Explore and understand codebase architecture and patterns
+description: Explore and understand codebase architecture, patterns, and design decisions
 ---
 
-Your task is to **observe and understand** the codebase for the subject.
+Explore and understand the codebase for the specified subject.
 
 Focus area: $ARGUMENTS
 
-## Guidelines
+## Role: Exploration Only
 
-1. **Exploration Only** — Do NOT:
-   - Debug specific issues
-   - Create plans for new features
-   - Propose fixes or changes
-   - Generate implementation tasks
+**DO NOT**: Debug issues, plan features, propose fixes, generate implementation tasks
 
-2. **Focus On** — DO:
-   - Explore existing patterns and design decisions
-   - Map relationships between components
-   - Understand architectural choices
-   - Document data flows and dependencies
-   - Identify conventions and practices
-   - Note how different modules interact
+**DO**: Explore patterns, map relationships, understand architecture, document data flows, identify conventions
 
-3. **Prepare to Discuss**:
-   - Summarize your findings in a clear, structured way
-   - Be ready to answer questions about what you observed
-   - Present trade-offs and rationale behind design choices
-   - Explain the "why" and "how" of the current implementation
+## Workflow
 
-4. **Update Docs**:
-   - Read docs/ folder first
-   - Check if any of the docs needs updating or extending and only put new information if it's not yet covered and fits the doc file's purpose
+### 1. Read Documentation First
+
+Read docs/ folder to understand existing documented patterns:
+- `docs/system_patterns.md` - Architectural patterns and design decisions
+- `docs/conventions.md` - Naming conventions, file structure
+- `docs/tech_context.md` - Technologies, constraints, dependencies
+- `docs/formatting.md` - Code style and formatting rules
+
+### 2. Explore the Codebase
+
+Examine:
+- File structure and organization
+- Component relationships and dependencies
+- Design patterns in use
+- Naming conventions and coding standards
+- Data flows and architectural decisions
+
+### 3. Analyze and Synthesize
+
+Identify high-level patterns, design principles, trade-offs, and common abstractions.
 
 ## Output Format
-
-Present your observations as:
 
 ### Architecture & Design
 - High-level patterns used
@@ -53,3 +54,11 @@ Present your observations as:
 - Interesting architectural choices
 - Trade-offs that were made
 - Framework/library usage patterns
+
+## Update Documentation (If Needed)
+
+If you discovered significant undocumented patterns or architectural decisions:
+- Identify the correct docs/ file to update
+- Add to existing sections (don't duplicate)
+- Keep concise, document **why** decisions were made
+- Only add important architectural decisions and patterns

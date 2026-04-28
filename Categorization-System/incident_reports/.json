@@ -1,0 +1,7 @@
+@'
+[{"date":"2026-04-15","note":"MCDONALDS #123","amount":-15.75}]
+'@ | Set-Content -Path payload.json
+
+curl.exe -X POST "http://localhost:8003/transactions/import?debug=true" `
+  -H "Content-Type: application/json" `
+  -d "@payload.json"

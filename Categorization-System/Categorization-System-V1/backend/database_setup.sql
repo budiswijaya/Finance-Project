@@ -297,3 +297,18 @@ ON merchant_normalization_rules (is_active, priority, id);
 
 CREATE INDEX IF NOT EXISTS idx_merchant_normalization_rules_pattern_lower
 ON merchant_normalization_rules (LOWER(pattern));
+
+-- Seed example merchant normalization rules for common noisy transaction notes
+INSERT INTO merchant_normalization_rules (pattern, replacement, match_type, priority, is_active, updated_at)
+SELECT * FROM (
+    VALUES
+        ('mcdonalds', 'mcdonalds', 'word_boundary', 1, TRUE, NOW()),
+        ('mcdo', 'mcdonalds', 'word_boundary', 1, TRUE, NOW()),
+        ('mcd', 'mcdonalds', 'word_boundary', 2, TRUE, NOW()),
+        ('#', '', 'substring', 10, TRUE, NOW())
+) AS sample_rules(pattern, replacement, match_type, priority, is_active, updated_at)
+WHERE NOT EXISTS (
+    SELECT 1 FROM merchant_normalization_rules mr
+    WHERE LOWER(TRIM(mr.pattern)) = LOWER(TRIM(sample_rules.pattern))
+      AND mr.is_active = TRUE
+);
