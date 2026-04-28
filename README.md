@@ -9,8 +9,6 @@
 
 # Project Description: Finance Data Normalization and Categorization System
 
-**Short Name:** Finance Categorization System
-
 **Author:** Budi S Wijaya  
 **Date:** March 22, 2026 (Last Updated: April 28, 2026)  
 **Status:** Active  
