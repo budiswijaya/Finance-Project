@@ -1,3 +1,12 @@
+<img
+   src="https://raw.githubusercontent.com/budiswijaya/Finance-Project/blob/main/0.png"
+   alt="Finance Data Normalization and Categorization System Setup"
+/>
+<img
+   src="https://raw.githubusercontent.com/budiswijaya/Finance-Project/blob/main/1.png"
+   alt="Finance Data Normalization and Categorization System Setup "
+/>
+
 # Project Description: Finance Data Normalization and Categorization System
 
 **Short Name:** Finance Categorization System
