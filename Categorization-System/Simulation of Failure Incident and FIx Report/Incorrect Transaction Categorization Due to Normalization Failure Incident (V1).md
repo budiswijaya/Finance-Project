@@ -2,7 +2,7 @@
 
 **Project:** Data Normalization & Categorization Engine Version 1
 **Date:** 2026-04-27
-**Reporter:** Technical Support / Backend Engineering
+**Reporter:** Tester
 
 ---
 
@@ -398,7 +398,7 @@ That makes support triage more concrete.
 
 ---
 
-## 10. Incident Summary for Interview Use
+## 10. Incident Summary
 
 This incident is especially strong because it combines:
 

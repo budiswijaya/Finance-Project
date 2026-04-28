@@ -2,10 +2,107 @@
 
 **Short Name:** Finance Categorization System
 
-**Author:** Architecture Team  
+**Author:** Budi S Wijaya  
 **Date:** March 22, 2026 (Last Updated: April 28, 2026)  
 **Status:** Active  
 **Version:** 1.0 (Phase 3 Complete)
+
+---
+
+## 🚀 What this project does
+
+This project is a backend-driven system that processes raw financial transactions and automatically categorizes them using deterministic rules. It’s designed to simulate how real-world finance systems handle messy, inconsistent transaction data—and how support engineers debug issues when classification goes wrong.
+
+- Upload transaction files (CSV, Excel, JSON, text)
+- Parse and normalize into structured data
+- Automatically categorize transactions
+- Store results in PostgreSQL
+- Admin tools for managing rules and observability
+  - categories
+  - keyword rules
+  - merchant normalization rules
+  - observability / debugging data
+
+## ⚙️ How it works (high-level flow)
+
+```
+Upload → Parse → Normalize → Classify → Store → Observe
+```
+
+1. File is uploaded via frontend
+2. Backend parses it into structured rows
+3. User confirms/edit mapping
+4. Backend:
+   - optionally normalizes merchant text
+   - classifies using keyword rules
+   - stores transactions
+   - logs classification results
+
+## 🔍 Classification Logic
+
+The backend classifies each transaction in 3 steps:
+
+1. Phase 1 → Basic Classification (Foundation)
+
+```
+"coffee" → Food & Dining
+```
+
+1. Phase 2 → Improved Matching + Observability
+
+```
+"Spent on food & dining" → Food & Dining
+```
+
+1. Phase 3 → Normalization + Feature Flags (Real-world handling)
+
+```
+"MCDONALDS #123" → Food & Dining
+"GRABFOOD MCDONALDS" → Food & Dining
+```
+
+It demonstrates:
+
+- handling messy real-world data
+- building rule-based systems
+- debugging production-like incidents
+- understanding system behavior vs user expectations
+
+## 🧪 Quick Examples
+
+✅ Clean Case (works as expected)
+
+```
+"coffee shop" → Food & Dining
+```
+
+Reason:
+
+- Clean input + direct keyword match = deterministic success
+
+❌ Failure Case (real incident)
+
+```
+"MCDONALDS #123" → ❌ fails (before normalization)  → ✅ Should be Food & Dining
+```
+
+Reason:
+
+- missing domain rule (no "mcdonalds" keyword)
+- lack of preprocessing (noise not removed)
+- System cannot classify → throws error
+
+⚠️ Ambiguous Case (advanced, high-value)
+
+```
+"GRABFOOD MCDONALDS" → ❌ Transportation (unexpected) → ✅ Should be Food & Dining
+```
+
+Reason:
+
+- Matches "grab" (Transportation)
+- Also contains "mcdonalds" (Food)
+- System picks based on rules, not meaning
 
 ---
 
@@ -76,12 +173,12 @@ High-level runtime:
 │         │                                                          │
 │         ▼ SQL                                                      │
 │  PostgreSQL                                                        │
-│  • categories                                                      │
-│  • category_keywords                                               │
-│  • transactions                                                    │
-│  • transaction_classification_log                                  │
-│  • merchant_normalization_rules (Phase 3)                          │
-│  • classification_context_version (Phase 3)                        │
+│  • categories → list of categories                                 │
+│  • category_keywords → rules for classification                    │
+│  • transactions → stored results                                   │
+│  • transaction_classification_log → debugging & observability      │
+│  • merchant_normalization_rules (Phase 3) → clean noisy text       │
+│  • classification_context_version (Phase 3) → cache invalidation   │
 └────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -300,18 +397,18 @@ Deployment diagram:
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
-│                        Environment                            │
+│                        Environment                           │
 ├──────────────────────────────────────────────────────────────┤
-│  Browser                                                      │
-│    │                                                          │
-│    ▼                                                          │
-│  Frontend (React/Vite)                                        │
-│    │ HTTP                                                     │
-│    ▼                                                          │
-│  Backend (FastAPI)                                            │
-│    │ SQL                                                      │
-│    ▼                                                          │
-│  PostgreSQL                                                   │
+│  Browser                                                     │
+│    │                                                         │
+│    ▼                                                         │
+│  Frontend (React/Vite)                                       │
+│    │ HTTP                                                    │
+│    ▼                                                         │
+│  Backend (FastAPI)                                           │
+│    │ SQL                                                     │
+│    ▼                                                         │
+│  PostgreSQL                                                  │
 └──────────────────────────────────────────────────────────────┘
 ```
 
